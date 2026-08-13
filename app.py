@@ -4,15 +4,38 @@ from openpyxl import load_workbook
 import datetime
 
 EXCEL_FILE = "MATERIAL 1.xlsx"
+SHEET_NAME = "HEADER APLIKASI"
 
-st.set_page_config(page_title="Entri Data Material Pekerjaan", layout="wide")
+st.set_page_config(page_title="Sistem Entri Material PLN", layout="wide", page_icon="⚡")
 
-st.title("⚡ Form Entri Data Material Pekerjaan")
-st.markdown("Aplikasi entri data dengan **fitur pencarian material instan**.")
+st.title("⚡ Sistem Entri Material (Master Header Aplikasi)")
 
-# --- INITIALIZE SESSION STATE (Keranjang Sementara) ---
+# --- INITIALIZE SESSION STATE ---
 if "keranjang_material" not in st.session_state:
     st.session_state.keranjang_material = []
+
+# FUNGSIONALITAS MEMBACA MASTER DATA DARI SHEET 'HEADER APLIKASI'
+@st.cache_data(ttl=60)
+def load_master_data():
+    try:
+        df_raw = pd.read_excel(EXCEL_FILE, sheet_name=SHEET_NAME, header=None)
+        
+        # Ambil data mulai dari baris ke-6 (indeks 5) yang berisi Header Tabel
+        # Kolom B (1) = JENIS KONSTRUKSI, Kolom C (2) = NAMA MATERIAL, Kolom D (3) = TYPE KONSTRUKSI
+        df_mat = df_raw.iloc[6:, [1, 2, 3]].dropna(subset=[2])
+        df_mat.columns = ["JENIS_KONSTRUKSI", "NAMA_MATERIAL", "TYPE_KONSTRUKSI"]
+        
+        # Bersihkan spasi berlebih
+        df_mat["JENIS_KONSTRUKSI"] = df_mat["JENIS_KONSTRUKSI"].astype(str).str.strip()
+        df_mat["NAMA_MATERIAL"] = df_mat["NAMA_MATERIAL"].astype(str).str.strip()
+        df_mat["TYPE_KONSTRUKSI"] = df_mat["TYPE_KONSTRUKSI"].astype(str).str.strip()
+        
+        return df_mat
+    except Exception as e:
+        st.error(f"Gagal membaca file '{EXCEL_FILE}'. Pastikan file berada di folder yang sama. Detail: {e}")
+        return pd.DataFrame(columns=["JENIS_KONSTRUKSI", "NAMA_MATERIAL", "TYPE_KONSTRUKSI"])
+
+df_master = load_master_data()
 
 # --- 1. INFORMASI PEKERJAAN ---
 st.subheader("1. Informasi Pekerjaan")
@@ -20,133 +43,140 @@ col1, col2 = st.columns(2)
 
 with col1:
     nama_pekerjaan = st.text_input("Nama Pekerjaan", placeholder="Masukkan nama pekerjaan...")
-    type_pekerjaan = st.selectbox(
-        "Type Pekerjaan",
-        ["SAR", "PFK", "PREVENTIF", "KEYPOINT"]
-    )
+    alamat_pekerjaan = st.text_input("Alamat Pekerjaan", placeholder="Masukkan lokasi/alamat pekerjaan...")
 
 with col2:
-    jenis_konstruksi = st.selectbox(
-        "Jenis Konstruksi",
-        ["SKTR", "SKSR", "SUTR", "SUTM"]
-    )
+    jenis_pekerjaan = st.selectbox("Jenis Pekerjaan", ["SAR", "PFK", "PREVENTIF", "KEYPOINT"])
     tanggal = st.date_input("Tanggal Pekerjaan", datetime.date.today())
 
 st.divider()
 
-# --- READ DAFTAR MATERIAL DARI EXCEL ---
-try:
-    df_raw = pd.read_excel(EXCEL_FILE, sheet_name='Sheet1', header=None)
-    # Ambil daftar nama material dari kolom indeks 1 mulai baris ke-6
-    daftar_material = df_raw.iloc[6:, 1].dropna().drop_duplicates().tolist()
-except Exception as e:
-    st.error(f"Gagal membaca file Excel '{EXCEL_FILE}'. Pastikan file berada di folder yang sama. Error: {e}")
-    daftar_material = []
-
-# --- 2. CARI & TAMBAH MATERIAL (KERANJANG) ---
+# --- 2. FILTER & PENCARIAN MATERIAL ---
 st.subheader("2. Cari & Tambah Material")
 
+if not df_master.empty:
+    list_jenis_konstruksi = sorted(df_master["JENIS_KONSTRUKSI"].unique().tolist())
+else:
+    list_jenis_konstruksi = []
+
+col_filter1, col_filter2 = st.columns(2)
+
+with col_filter1:
+    selected_jenis_konstruksi = st.selectbox("📌 Pilih Jenis Konstruksi", options=list_jenis_konstruksi, index=0 if list_jenis_konstruksi else None)
+
+# Filter Type Konstruksi berdasarkan Jenis Konstruksi terpilih
+if selected_jenis_konstruksi:
+    df_filtered_type = df_master[df_master["JENIS_KONSTRUKSI"] == selected_jenis_konstruksi]
+    list_type_konstruksi = sorted(df_filtered_type["TYPE_KONSTRUKSI"].unique().tolist())
+else:
+    df_filtered_type = df_master
+    list_type_konstruksi = []
+
+with col_filter2:
+    selected_type_konstruksi = st.selectbox(
+        "🏷️ Filter Type Konstruksi (Opsional)", 
+        options=["-- Semua Type --"] + list_type_konstruksi,
+        index=0
+    )
+
+# Filter Daftar Material Sesuai Pilihan
+df_final_mat = df_filtered_type.copy()
+if selected_type_konstruksi and selected_type_konstruksi != "-- Semua Type --":
+    df_final_mat = df_final_mat[df_final_mat["TYPE_KONSTRUKSI"] == selected_type_konstruksi]
+
+list_material_filtered = sorted(df_final_mat["NAMA_MATERIAL"].unique().tolist())
+
+st.write("---")
 col_mat, col_pasang, col_bongkar, col_btn = st.columns([5, 2, 2, 2])
 
 with col_mat:
     selected_material = st.selectbox(
-        "🔍 Cari Nama Material (Ketik kata kunci nama material di sini)",
-        options=daftar_material,
+        f"🔍 Cari Nama Material ({len(list_material_filtered)} item ditemukan)",
+        options=list_material_filtered,
         index=None,
-        placeholder="Ketik untuk mencari, contoh: Kabel, Pipa, Bolt..."
+        placeholder="Ketik untuk mencari nama material..."
     )
 
 with col_pasang:
-    jumlah_pasang = st.number_input("Jumlah Pasang", min_value=0, value=0, step=1)
+    jumlah_pasang = st.number_input("Volume Pasang", min_value=0, value=0, step=1)
 
 with col_bongkar:
-    jumlah_bongkar = st.number_input("Jumlah Bongkar", min_value=0, value=0, step=1)
+    jumlah_bongkar = st.number_input("Volume Bongkar", min_value=0, value=0, step=1)
 
 with col_btn:
-    st.write(" ") # Alignment
     st.write(" ")
-    tambah_btn = st.button("➕ Tambah ke Daftar", use_container_width=True)
+    st.write(" ")
+    tambah_btn = st.button("➕ Tambah", use_container_width=True)
 
-# Proses Tambah ke Session State
 if tambah_btn:
     if not selected_material:
-        st.warning("Pilih atau ketik nama material terlebih dahulu!")
+        st.warning("Pilih material terlebih dahulu!")
     else:
         total = jumlah_pasang + jumlah_bongkar
         if total == 0:
-            st.warning("Jumlah pasang atau bongkar minimal harus lebih dari 0!")
+            st.warning("Volume pasang atau bongkar harus > 0!")
         else:
-            # Cek apakah material sudah ada di keranjang
             ada = False
             for item in st.session_state.keranjang_material:
                 if item["Material"] == selected_material:
-                    item["Jumlah Pasang"] += jumlah_pasang
-                    item["Jumlah Bongkar"] += jumlah_bongkar
-                    item["Jumlah Material"] += total
+                    item["Volume Pasang"] += jumlah_pasang
+                    item["Volume Bongkar"] += jumlah_bongkar
+                    item["Volume Material"] += total
                     ada = True
                     break
-            
             if not ada:
                 st.session_state.keranjang_material.append({
+                    "Jenis Konstruksi": selected_jenis_konstruksi,
                     "Material": selected_material,
-                    "Jumlah Pasang": jumlah_pasang,
-                    "Jumlah Bongkar": jumlah_bongkar,
-                    "Jumlah Material": total
+                    "Volume Pasang": jumlah_pasang,
+                    "Volume Bongkar": jumlah_bongkar,
+                    "Volume Material": total
                 })
-            st.success(f"'{selected_material}' berhasil ditambahkan ke daftar!")
+            st.success(f"'{selected_material}' ditambahkan ke keranjang!")
 
 st.divider()
 
-# --- 3. DAFTAR MATERIAL TERPILIH & SUBMIT ---
-st.subheader("3. Daftar Material Terpilih (Keranjang)")
+# --- 3. KERANJANG INPUT & SUBMIT ---
+st.subheader("3. Keranjang Input Material")
 
 if len(st.session_state.keranjang_material) > 0:
     df_keranjang = pd.DataFrame(st.session_state.keranjang_material)
     st.dataframe(df_keranjang, use_container_width=True)
 
     col_clear, col_submit = st.columns([2, 8])
-    
     with col_clear:
-        if st.button("🗑️ Kosongkan Daftar", type="secondary", use_container_width=True):
+        if st.button("🗑️ Kosongkan Keranjang", use_container_width=True):
             st.session_state.keranjang_material = []
             st.rerun()
 
     with col_submit:
         if st.button("🚀 SUBMIT SEMUA DATA KE EXCEL", type="primary", use_container_width=True):
             if not nama_pekerjaan:
-                st.error("Mohon isi Nama Pekerjaan terlebih dahulu di bagian atas!")
+                st.error("Isi Nama Pekerjaan terlebih dahulu!")
             else:
                 try:
                     wb = load_workbook(EXCEL_FILE)
-                    
-                    # Buat/buka sheet REKAP_INPUT
                     if "REKAP_INPUT" not in wb.sheetnames:
                         ws = wb.create_sheet("REKAP_INPUT")
-                        ws.append(["Nama Pekerjaan", "Type Pekerjaan", "Jenis Konstruksi", "Tanggal", "Material", "Jumlah Pasang", "Jumlah Bongkar", "Jumlah Material"])
+                        ws.append([
+                            "Nama Pekerjaan", "Alamat Pekerjaan", "Jenis Pekerjaan", "Tanggal",
+                            "Jenis Konstruksi", "Material", "Volume Pasang", "Volume Bongkar", "Volume Material"
+                        ])
                     else:
                         ws = wb["REKAP_INPUT"]
-                    
-                    # Simpan seluruh isi keranjang
+
                     for item in st.session_state.keranjang_material:
                         ws.append([
-                            nama_pekerjaan,
-                            type_pekerjaan,
-                            jenis_konstruksi,
-                            str(tanggal),
-                            item["Material"],
-                            item["Jumlah Pasang"],
-                            item["Jumlah Bongkar"],
-                            item["Jumlah Material"]
+                            nama_pekerjaan, alamat_pekerjaan, jenis_pekerjaan, str(tanggal),
+                            item["Jenis Konstruksi"], item["Material"],
+                            item["Volume Pasang"], item["Volume Bongkar"], item["Volume Material"]
                         ])
-                    
+
                     wb.save(EXCEL_FILE)
                     st.balloons()
-                    st.success("✅ Semua data material berhasil disimpan ke sheet 'REKAP_INPUT' di Excel!")
-                    
-                    # Reset keranjang setelah berhasil submit
+                    st.success("✅ Berhasil menyimpan transaksi ke sheet REKAP_INPUT!")
                     st.session_state.keranjang_material = []
-                    
                 except Exception as err:
-                    st.error(f"Gagal menyimpan ke Excel. Pastikan file Excel tidak sedang dibuka. Detail: {err}")
+                    st.error(f"Gagal menyimpan data. Pastikan file Excel sedang tidak dibuka. Detail: {err}")
 else:
-    st.info("Belum ada material yang ditambahkan ke daftar.")
+    st.info("Belum ada material dalam keranjang.")
