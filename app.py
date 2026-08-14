@@ -5,20 +5,22 @@ st.set_page_config(
     page_title="Sistem Entri Material PLN", layout="wide"
 )
 
+
 # ==========================================
 # 1. LOAD & CLEANING MASTER DATABASE EXCEL
 # ==========================================
 @st.cache_data
 def load_and_clean_master(filepath):
+    # Membaca data tabel mulai dari baris header (index 5)
     df = pd.read_excel(filepath, sheet_name="HEADER APLIKASI", header=5)
 
-    # Pembersihan Spasi Berlebih pada Kolom Kunci
+    # 1. Trim spasi berlebih pada nama material dan tipe
     string_cols = ["JENIS KONSTRUKSI", "TYPE KONSTRUKSI", "NAMA MATERIAL"]
     for col in string_cols:
         if col in df.columns:
             df[col] = df[col].astype(str).str.strip()
 
-    # Konversi Kolom Harga & Jasa ke Tipe Data Angka (Numeric)
+    # 2. Konversi kolom Harga & Jasa menjadi Angka (Teks 'PLN' otomatis jadi 0)
     numeric_cols = ["HARGA MATERIAL", "JASA PASANG", "JASA BONGKAR"]
     for col in numeric_cols:
         if col in df.columns:
@@ -33,18 +35,17 @@ try:
 except Exception:
     try:
         df_master = load_and_clean_master("MATERIAL 1_2.xlsx")
-    except Exception as e:
-        st.error(f"Gagal membaca file master Excel! Error: {e}")
-        st.stop()
+    except Exception:
+        df_master = load_and_clean_master("MATERIAL 1_3.xlsx")
 
 # ==========================================
-# 2. INISIALISASI SESSION STATE
+# 2. SESSION STATE KERANJANG
 # ==========================================
 if "keranjang" not in st.session_state:
     st.session_state.keranjang = []
 
 # ==========================================
-# 3. BAGIAN 1: HEADER DATA PEKERJAAN & PELANGGAN
+# 3. BAGIAN 1: HEADER PEKERJAAN (SESUAI EXCEL MASTER)
 # ==========================================
 st.title("⚡ Sistem Entri Material PLN")
 st.subheader("1. Header Data Pekerjaan")
@@ -52,44 +53,19 @@ st.subheader("1. Header Data Pekerjaan")
 col_h1, col_h2 = st.columns(2)
 
 with col_h1:
-    no_agenda = st.text_input(
-        "No. Agenda / SPK", value="", placeholder="Masukkan Nomor Agenda..."
+    nama_pekerjaan = st.text_input(
+        "NAMA PEKERJAAN :", placeholder="Masukkan Nama Pekerjaan..."
     )
-    nama_pelanggan = st.text_input(
-        "Nama Pelanggan",
-        value="",
-        placeholder="Masukkan Nama Pelanggan / Lokasi...",
-    )
-    alamat = st.text_area(
-        "Alamat Pekerjaan", value="", placeholder="Masukkan Alamat Lengkap..."
+    alamat_pekerjaan = st.text_area(
+        "ALAMAT PEKERJAAN :", placeholder="Masukkan Alamat Pekerjaan..."
     )
 
 with col_h2:
-    unit_up3 = st.selectbox(
-        "Unit / ULP", ["ULP KOTA", "ULP TIMUR", "ULP BARAT", "ULP SELATAN"]
-    )
-    daya_pasang = st.selectbox(
-        "Daya (VA)",
-        [
-            "450 VA",
-            "900 VA",
-            "1300 VA",
-            "2200 VA",
-            "3500 VA",
-            "5500 VA",
-            "11000 VA",
-            "Lainnya",
-        ],
-    )
     jenis_pekerjaan = st.selectbox(
-        "Jenis Pekerjaan",
-        [
-            "PASANG BARU (PB)",
-            "TAMBAH DAYA (TD)",
-            "GESER TIANG / GARDU",
-            "PEMELIHARAAN JARINGAN",
-        ],
+        "JENIS PEKERJAAN :",
+        ["SAR", "PFK", "PREVENTIF", "KEYPOINT", "PEMELIHARAAN JARINGAN"],
     )
+    tanggal = st.date_input("TANGGAL :")
 
 st.markdown("---")
 
@@ -98,7 +74,7 @@ st.markdown("---")
 # ==========================================
 st.subheader("2. Form Input Material Pekerjaan")
 
-# Dropdown Dinamis dari Master Data
+# Pilihan Dropdown Dinamis dari Database
 list_jenis = sorted(df_master["JENIS KONSTRUKSI"].unique().tolist())
 
 col_f1, col_f2, col_f3 = st.columns(3)
@@ -137,17 +113,16 @@ with col_v4:
     st.write(" ")
     btn_tambah = st.button("➕ Tambah ke Keranjang", use_container_width=True)
 
-# Logika Tambah Item ke Keranjang
+# Tambah Item ke Keranjang
 if btn_tambah:
-    item_baru = {
+    st.session_state.keranjang.append({
         "Jenis Konstruksi": jenis_selected,
         "Type Konstruksi": type_selected,
         "Material": material_selected,
         "Volume Material": vol_mat,
         "Volume Pasang": vol_pasang,
         "Volume Bongkar": vol_bongkar,
-    }
-    st.session_state.keranjang.append(item_baru)
+    })
     st.success("Item berhasil ditambahkan!")
 
 st.markdown("---")
@@ -164,7 +139,7 @@ def hitung_keranjang(list_keranjang, df_master):
 
     df_cart = pd.DataFrame(list_keranjang)
 
-    # Match dengan Master Database berdasarkan Jenis, Type, dan Nama Material
+    # Lookup Harga dari Master Database
     merged = pd.merge(
         df_cart,
         df_master,
@@ -177,7 +152,7 @@ def hitung_keranjang(list_keranjang, df_master):
     df_cart["Harga Pasang Satuan"] = merged["JASA PASANG"].fillna(0.0)
     df_cart["Harga Bongkar Satuan"] = merged["JASA BONGKAR"].fillna(0.0)
 
-    # Perhitungan Biaya Total
+    # Perhitungan Total per Item
     df_cart["Biaya Material"] = (
         df_cart["Volume Material"] * df_cart["Harga Material Satuan"]
     )
@@ -197,10 +172,10 @@ def hitung_keranjang(list_keranjang, df_master):
     return df_cart, total_estimasi
 
 
-# Menghitung Keranjang
+# Proses Kalkulasi Keranjang
 df_hasil, total_biaya = hitung_keranjang(st.session_state.keranjang, df_master)
 
-# Menampilkan Tabel Keranjang
+# Tampilkan Tabel Keranjang
 if not df_hasil.empty:
     df_display = df_hasil[[
         "Jenis Konstruksi",
@@ -214,7 +189,7 @@ if not df_hasil.empty:
         "Biaya Pasang",
     ]].copy()
 
-    # Format Tampilan Rupiah
+    # Format Tampilan Mata Uang Rp
     df_display["Harga Material Satuan"] = df_display[
         "Harga Material Satuan"
     ].apply(lambda x: f"Rp {x:,.0f}")
@@ -229,7 +204,7 @@ if not df_hasil.empty:
 else:
     st.info("Keranjang kosong. Silakan isi form di atas untuk memasukkan data.")
 
-# Menampilkan Total Estimasi Harga
+# Display Total Estimasi Harga
 st.markdown("##### 💰 TOTAL ESTIMASI HARGA PEKERJAAN")
 st.markdown(f"# Rp {total_biaya:,.2f}")
 
@@ -246,10 +221,4 @@ with col_act2:
         type="primary",
         use_container_width=True,
     ):
-        if not no_agenda:
-            st.warning("Silakan isi No. Agenda sebelum mengirim data.")
-        else:
-            st.success(
-                f"Data untuk Agenda '{no_agenda}' berhasil disubmit ke Google"
-                " Sheets!"
-            )
+        st.success("Data berhasil disubmit!")
