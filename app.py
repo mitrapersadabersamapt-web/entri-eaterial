@@ -184,17 +184,18 @@ def hitung_keranjang(list_keranjang, df_master):
     df_cart["Jasa Pasang Satuan"] = merged["JASA PASANG"].fillna(0.0)
     df_cart["Jasa Bongkar Satuan"] = merged["JASA BONGKAR"].fillna(0.0)
 
-    # 1. Biaya Pasang
+    # 1. Biaya Pasang = Jasa Pasang Satuan x Volume Pasang
     df_cart["Biaya Pasang"] = (
         df_cart["Volume Pasang"] * df_cart["Jasa Pasang Satuan"]
     )
 
-    # 2. Biaya Bongkar
+    # 2. Biaya Bongkar = Jasa Bongkar Satuan x Volume Bongkar
     df_cart["Biaya Bongkar"] = (
         df_cart["Volume Bongkar"] * df_cart["Jasa Bongkar Satuan"]
     )
 
-    # 3. Harga Material (Jika nama material mengandung "PLN" = 0)
+    # 3. Harga Material = Harga Material Satuan x Volume Material
+    # ATURAN: Jika nama material mengandung kata "PLN", harganya 0
     def hitung_biaya_material(row):
         nama_mat = str(row["Material"]).upper()
         if "PLN" in nama_mat:
@@ -230,6 +231,7 @@ if not df_hasil.empty:
         "Biaya Bongkar",
     ]].copy()
 
+    # Tampilan di Streamlit berformat Rupiah
     df_display["Harga Material"] = df_display["Harga Material"].apply(
         lambda x: f"Rp {x:,.0f}"
     )
@@ -270,6 +272,7 @@ with col_act2:
             try:
                 payload = []
                 for item in df_hasil.to_dict("records"):
+                    # MENGIRIM ANGKA MURNI KE GOOGLE SHEETS AGAR TIDAK EROR DESIMAL
                     payload.append({
                         "NAMA PEKERJAAN": nama_pekerjaan,
                         "ALAMAT PEKERJAAN": alamat_pekerjaan,
@@ -278,13 +281,13 @@ with col_act2:
                         "JENIS KONSTRUKSI": item["Jenis Konstruksi"],
                         "TYPE KONSTRUKSI": item["Type Konstruksi"],
                         "NAMA MATERIAL": item["Material"],
-                        "VOL MATERIAL": item["Volume Material"],
-                        "VOL PASANG": item["Volume Pasang"],
-                        "VOL BONGKAR": item["Volume Bongkar"],
-                        "HARGA MATERIAL": f"Rp {item['Harga Material']:,.0f}",
-                        "BIAYA PASANG": f"Rp {item['Biaya Pasang']:,.0f}",
-                        "BIAYA BONGKAR": f"Rp {item['Biaya Bongkar']:,.0f}",
-                        "TOTAL ESTIMASI": f"Rp {total_biaya:,.2f}",
+                        "VOL MATERIAL": int(item["Volume Material"]),
+                        "VOL PASANG": int(item["Volume Pasang"]),
+                        "VOL BONGKAR": int(item["Volume Bongkar"]),
+                        "HARGA MATERIAL": round(float(item["Harga Material"]), 2),
+                        "BIAYA PASANG": round(float(item["Biaya Pasang"]), 2),
+                        "BIAYA BONGKAR": round(float(item["Biaya Bongkar"]), 2),
+                        "TOTAL ESTIMASI": round(float(total_biaya), 2),
                     })
 
                 response = requests.post(WEBHOOK_URL, json=payload, timeout=15)
