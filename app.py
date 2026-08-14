@@ -2,13 +2,8 @@ import streamlit as st
 import pandas as pd
 from streamlit_gsheets import GSheetsConnection
 import datetime
-import requests
-import re
 
-# --- URL WEB APP GOOGLE APPS SCRIPT ANDA ---
-WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz-ryJ47OM-ZwV7h-7G5eRgjBGo3IY96xrTC7VR2c5oATUkd6yLgnmYCRsItS6-C8g/exec"
-
-# URL Spreadsheet untuk membaca/menampilkan rekap data
+# --- URL GOOGLE SHEETS ANDA ---
 SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1DUnC28hWJPXVKAamJSHv2t3LR2wdVCq-jegYJKIPAQY/edit?usp=sharing"
 
 EXCEL_FILE = "MATERIAL 1.xlsx"
@@ -18,57 +13,28 @@ st.set_page_config(page_title="Sistem Entri Material PLN", layout="wide", page_i
 
 st.title("⚡ Sistem Entri Material PLN")
 
+# Inisialisasi Koneksi Google Sheets
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # --- INITIALIZE SESSION STATE ---
 if "keranjang_material" not in st.session_state:
     st.session_state.keranjang_material = []
 
-def clean_str(val):
-    if pd.isna(val):
-        return ""
-    # Menghapus spasi ganda dan spasi di awal/akhir
-    return re.sub(r'\s+', ' ', str(val)).strip()
-
-def parse_number(val):
-    if pd.isna(val):
-        return 0.0
-    val_str = str(val).strip()
-    if "PLN" in val_str.upper():
-        return 0.0
-    try:
-        # Bersihkan karakter selain angka, titik, dan minus
-        cleaned = re.sub(r'[^0-9.-]', '', val_str)
-        return float(cleaned) if cleaned else 0.0
-    except Exception:
-        return 0.0
-
-# MENGAMBIL MASTER DATA MATERIAL DARI EXCEL LOKAL REPO (TANPA CACHE AGAR SELALU UPDATE)
+# MENGAMBIL MASTER DATA MATERIAL DARI EXCEL LOKAL REPO
+@st.cache_data(ttl=60)
 def load_master_data():
     try:
         df_raw = pd.read_excel(EXCEL_FILE, sheet_name=SHEET_NAME, header=None)
+        df_mat = df_raw.iloc[6:, [1, 2, 3]].dropna(subset=[2])
+        df_mat.columns = ["JENIS_KONSTRUKSI", "NAMA_MATERIAL", "TYPE_KONSTRUKSI"]
         
-        # Mengambil baris data mulai indeks ke-6
-        df_mat = df_raw.iloc[6:, :].copy()
-        
-        df_selected = pd.DataFrame()
-        df_selected["JENIS_KONSTRUKSI"] = df_mat.iloc[:, 1].apply(clean_str)
-        df_selected["NAMA_MATERIAL"] = df_mat.iloc[:, 2].apply(clean_str)
-        df_selected["TYPE_KONSTRUKSI"] = df_mat.iloc[:, 3].apply(clean_str)
-        
-        # Parse Angka
-        df_selected["HARGA_MATERIAL"] = df_mat.iloc[:, 4].apply(parse_number)
-        df_selected["JASA_PASANG"] = df_mat.iloc[:, 5].apply(parse_number)
-        df_selected["JASA_BONGKAR"] = df_mat.iloc[:, 6].apply(parse_number)
-
-        # Nilai mentah untuk label
-        df_selected["HARGA_MATERIAL_RAW"] = df_mat.iloc[:, 4].fillna("0").apply(clean_str)
-
-        df_selected = df_selected[df_selected["NAMA_MATERIAL"] != ""]
-        return df_selected
+        df_mat["JENIS_KONSTRUKSI"] = df_mat["JENIS_KONSTRUKSI"].astype(str).str.strip()
+        df_mat["NAMA_MATERIAL"] = df_mat["NAMA_MATERIAL"].astype(str).str.strip()
+        df_mat["TYPE_KONSTRUKSI"] = df_mat["TYPE_KONSTRUKSI"].astype(str).str.strip()
+        return df_mat
     except Exception as e:
         st.error(f"Gagal membaca master file '{EXCEL_FILE}'. Detail: {e}")
-        return pd.DataFrame(columns=["JENIS_KONSTRUKSI", "NAMA_MATERIAL", "TYPE_KONSTRUKSI", "HARGA_MATERIAL", "JASA_PASANG", "JASA_BONGKAR", "HARGA_MATERIAL_RAW"])
+        return pd.DataFrame(columns=["JENIS_KONSTRUKSI", "NAMA_MATERIAL", "TYPE_KONSTRUKSI"])
 
 df_master = load_master_data()
 
@@ -97,12 +63,7 @@ else:
 col_filter1, col_filter2 = st.columns(2)
 
 with col_filter1:
-    selected_jenis_konstruksi = st.selectbox(
-        "📌 Pilih Jenis Konstruksi", 
-        options=list_jenis_konstruksi, 
-        index=0 if list_jenis_konstruksi else None,
-        key="sel_jenis_k"
-    )
+    selected_jenis_konstruksi = st.selectbox("📌 Pilih Jenis Konstruksi", options=list_jenis_konstruksi, index=0 if list_jenis_konstruksi else None)
 
 if selected_jenis_konstruksi:
     df_filtered_type = df_master[df_master["JENIS_KONSTRUKSI"] == selected_jenis_konstruksi]
@@ -115,8 +76,7 @@ with col_filter2:
     selected_type_konstruksi = st.selectbox(
         "🏷️ Filter Type Konstruksi (Opsional)", 
         options=["-- Semua Type --"] + list_type_konstruksi,
-        index=0,
-        key="sel_type_k"
+        index=0
     )
 
 df_final_mat = df_filtered_type.copy()
@@ -156,34 +116,11 @@ if tambah_btn:
         if volume_material == 0 and volume_pasang == 0 and volume_bongkar == 0:
             st.warning("Minimal salah satu volume (Material / Pasang / Bongkar) harus diisi > 0!")
         else:
-            # PENCARIAN MATCHING DARI DF_MASTER
-            match_cond = (df_master["NAMA_MATERIAL"] == selected_material)
-            if selected_jenis_konstruksi:
-                match_cond = match_cond & (df_master["JENIS_KONSTRUKSI"] == selected_jenis_konstruksi)
-            
-            row_match = df_master[match_cond]
-
-            if not row_match.empty:
-                type_konstruksi_val = row_match["TYPE_KONSTRUKSI"].values[0]
-                harga_mat = float(row_match["HARGA_MATERIAL"].values[0])
-                harga_pasang = float(row_match["JASA_PASANG"].values[0])
-                harga_bongkar = float(row_match["JASA_BONGKAR"].values[0])
-                harga_mat_raw = str(row_match["HARGA_MATERIAL_RAW"].values[0])
-            else:
-                type_konstruksi_val = selected_type_konstruksi if selected_type_konstruksi != "-- Semua Type --" else "-"
-                harga_mat, harga_pasang, harga_bongkar = 0.0, 0.0, 0.0
-                harga_mat_raw = "0"
-
-            # Hitung biaya perkalian
-            total_biaya_mat = volume_material * harga_mat
-            total_biaya_pasang = volume_pasang * harga_pasang
-            total_biaya_bongkar = volume_bongkar * harga_bongkar
-            
-            # Estimasi Harga Total Item Ini
-            estimasi_harga = total_biaya_mat + total_biaya_pasang + total_biaya_bongkar
-
-            # Format label harga satuan
-            harga_satuan_label = "PLN" if "PLN" in harga_mat_raw.upper() else f"Rp {harga_mat:,.0f}"
+            row_match = df_master[
+                (df_master["JENIS_KONSTRUKSI"] == selected_jenis_konstruksi) & 
+                (df_master["NAMA_MATERIAL"] == selected_material)
+            ]
+            type_konstruksi_val = row_match["TYPE_KONSTRUKSI"].values[0] if not row_match.empty else "-"
 
             st.session_state.keranjang_material.append({
                 "Jenis Konstruksi": selected_jenis_konstruksi,
@@ -191,14 +128,9 @@ if tambah_btn:
                 "Material": selected_material,
                 "Volume Material": volume_material,
                 "Volume Pasang": volume_pasang,
-                "Volume Bongkar": volume_bongkar,
-                "Harga Material Satuan": harga_satuan_label,
-                "Biaya Material": total_biaya_mat,
-                "Biaya Pasang": total_biaya_pasang,
-                "Biaya Bongkar": total_biaya_bongkar,
-                "Estimasi Harga": estimasi_harga
+                "Volume Bongkar": volume_bongkar
             })
-            st.success(f"'{selected_material}' ({type_konstruksi_val}) berhasil ditambahkan ke keranjang!")
+            st.success(f"'{selected_material}' berhasil ditambahkan ke keranjang!")
             st.rerun()
 
 st.divider()
@@ -208,13 +140,7 @@ st.subheader("3. Keranjang Input Material")
 
 if len(st.session_state.keranjang_material) > 0:
     df_keranjang = pd.DataFrame(st.session_state.keranjang_material)
-    
-    # Format Tampilan Tabel Keranjang
     st.dataframe(df_keranjang, use_container_width=True)
-
-    # Hitung total estimasi harga seluruh keranjang
-    total_estimasi_semua = df_keranjang["Estimasi Harga"].sum()
-    st.metric(label="💰 TOTAL ESTIMASI HARGA PEKERJAAN", value=f"Rp {total_estimasi_semua:,.2f}")
 
     col_clear, col_submit = st.columns([2, 8])
     with col_clear:
@@ -228,9 +154,12 @@ if len(st.session_state.keranjang_material) > 0:
                 st.error("Isi Nama Pekerjaan terlebih dahulu!")
             else:
                 try:
-                    payload = []
+                    # Ambil data eksisting menggunakan URL
+                    existing_data = conn.read(spreadsheet=SPREADSHEET_URL, ttl=0)
+                    
+                    new_rows = []
                     for item in st.session_state.keranjang_material:
-                        payload.append({
+                        new_rows.append({
                             "Nama Pekerjaan": nama_pekerjaan,
                             "Alamat Pekerjaan": alamat_pekerjaan,
                             "Jenis Pekerjaan": jenis_pekerjaan,
@@ -240,23 +169,18 @@ if len(st.session_state.keranjang_material) > 0:
                             "Material": item["Material"],
                             "Volume Material": item["Volume Material"],
                             "Volume Pasang": item["Volume Pasang"],
-                            "Volume Bongkar": item["Volume Bongkar"],
-                            "Harga Material Satuan": item["Harga Material Satuan"],
-                            "Biaya Material": item["Biaya Material"],
-                            "Biaya Pasang": item["Biaya Pasang"],
-                            "Biaya Bongkar": item["Biaya Bongkar"],
-                            "Estimasi Harga": item["Estimasi Harga"]
+                            "Volume Bongkar": item["Volume Bongkar"]
                         })
                     
-                    response = requests.post(WEB_APP_URL, json=payload)
+                    df_new = pd.DataFrame(new_rows)
+                    updated_df = pd.concat([existing_data, df_new], ignore_index=True)
                     
-                    if response.status_code == 200:
-                        st.balloons()
-                        st.success("✅ Berhasil menyimpan transaksi dan estimasi harga ke Google Sheets!")
-                        st.session_state.keranjang_material = []
-                        st.rerun()
-                    else:
-                        st.error(f"Gagal mengirim data. Response Code: {response.status_code}")
+                    # Update data ke Google Sheets menggunakan URL
+                    conn.update(spreadsheet=SPREADSHEET_URL, data=updated_df)
+                    
+                    st.balloons()
+                    st.success("✅ Berhasil menyimpan transaksi ke Google Sheets!")
+                    st.session_state.keranjang_material = []
                 except Exception as err:
                     st.error(f"Gagal menyimpan data ke Google Sheets. Detail: {err}")
 else:
