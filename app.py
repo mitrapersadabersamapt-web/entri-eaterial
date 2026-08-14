@@ -40,7 +40,7 @@ except Exception:
 if "keranjang" not in st.session_state:
     st.session_state.keranjang = []
 
-# State untuk reset volume otomatis ke 0
+# State untuk reset otomatis nilai volume ke 0
 if "v_mat" not in st.session_state:
     st.session_state.v_mat = 0
 if "v_pasang" not in st.session_state:
@@ -74,43 +74,59 @@ with col_h2:
 st.markdown("---")
 
 # ==========================================
-# 4. BAGIAN 2: FORM INPUT MATERIAL
+# 4. BAGIAN 2: FORM INPUT MATERIAL & PENCARIAN
 # ==========================================
 st.subheader("2. Form Input Material Pekerjaan")
 
-# Step 1: Filter Jenis Konstruksi
+# Step 1: Pilih Jenis Konstruksi
 list_jenis = sorted(df_master["JENIS KONSTRUKSI"].unique().tolist())
-jenis_selected = st.selectbox("Jenis Konstruksi", list_jenis)
+jenis_selected = st.selectbox("1. Pilih Jenis Konstruksi:", list_jenis)
 
-# Step 2: Filter Type Konstruksi sesuai Jenis Konstruksi yang dipilih
+# Filter Master Data berdasarkan Jenis Konstruksi
 df_filtered_jenis = df_master[
     df_master["JENIS KONSTRUKSI"] == jenis_selected
 ]
-list_type = sorted(df_filtered_jenis["TYPE KONSTRUKSI"].unique().tolist())
 
 col_f1, col_f2 = st.columns(2)
 
+# Step 2: Pilih Type Konstruksi
 with col_f1:
-    # Anda bisa langsung mengetik kata kunci pencarian di dalam dropdown ini
-    type_selected = st.selectbox(
-        "Type Konstruksi (Ketik untuk mencari):", list_type
-    )
+    list_type = sorted(df_filtered_jenis["TYPE KONSTRUKSI"].unique().tolist())
+    type_selected = st.selectbox("2. Pilih Type Konstruksi:", list_type)
 
-# Step 3: Filter Nama Material HANYA yang ada pada Type Konstruksi yang dipilih
+# Filter Master Data HANYA untuk Type Konstruksi yang dipilih
 df_filtered_type = df_filtered_jenis[
     df_filtered_jenis["TYPE KONSTRUKSI"] == type_selected
 ]
-list_material = sorted(df_filtered_type["NAMA MATERIAL"].unique().tolist())
+list_mat_all = sorted(df_filtered_type["NAMA MATERIAL"].unique().tolist())
 
+# Step 3: Pencarian dan Pemilihan Nama Material
 with col_f2:
-    # Anda bisa langsung mengetik kata kunci pencarian material di dalam dropdown ini
+    search_keyword = st.text_input(
+        "🔎 Cari Nama Material (Ketik Kata Kunci):",
+        placeholder="Ketik misal: BOLT, ISOLATOR, ARM, CABLE...",
+    )
+
+    # Filter daftar material berdasarkan kata kunci pencarian
+    if search_keyword.strip():
+        list_mat_display = [
+            m for m in list_mat_all if search_keyword.upper() in m.upper()
+        ]
+        if not list_mat_display:
+            st.warning(
+                f"⚠️ Tidak ditemukan material dengan kata kunci '{search_keyword}' pada {type_selected}."
+            )
+            list_mat_display = list_mat_all
+    else:
+        list_mat_display = list_mat_all
+
     material_selected = st.selectbox(
-        "Nama Material (Ketik untuk mencari):", list_material
+        "3. Pilih Nama Material (Hasil Filter):", list_mat_display
     )
 
 st.markdown("---")
 
-# Input Volume (Dengan Reset Otomatis ke 0)
+# Step 4: Input Volume Material (Reset Otomatis ke 0 saat Tambah)
 col_v1, col_v2, col_v3, col_v4 = st.columns([1, 1, 1, 1.2])
 
 with col_v1:
@@ -147,7 +163,7 @@ def tambah_ke_keranjang():
     }
     st.session_state.keranjang.append(item_baru)
 
-    # Reset otomatis volume ke 0 setelah berhasil ditambahkan
+    # Reset nilai volume otomatis kembali ke 0
     st.session_state.v_mat = 0
     st.session_state.v_pasang = 0
     st.session_state.v_bongkar = 0
@@ -178,7 +194,6 @@ def hitung_keranjang(list_keranjang, df_master):
 
     df_cart = pd.DataFrame(list_keranjang)
 
-    # Lookup Harga dari Master Data
     merged = pd.merge(
         df_cart,
         df_master,
@@ -191,7 +206,6 @@ def hitung_keranjang(list_keranjang, df_master):
     df_cart["Harga Pasang Satuan"] = merged["JASA PASANG"].fillna(0.0)
     df_cart["Harga Bongkar Satuan"] = merged["JASA BONGKAR"].fillna(0.0)
 
-    # Hitung Subtotal
     df_cart["Biaya Material"] = (
         df_cart["Volume Material"] * df_cart["Harga Material Satuan"]
     )
@@ -226,7 +240,6 @@ if not df_hasil.empty:
         "Biaya Pasang",
     ]].copy()
 
-    # Format Rupiah
     df_display["Harga Material Satuan"] = df_display[
         "Harga Material Satuan"
     ].apply(lambda x: f"Rp {x:,.0f}")
