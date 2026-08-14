@@ -3,6 +3,7 @@ import pandas as pd
 from streamlit_gsheets import GSheetsConnection
 import datetime
 import requests
+import re
 
 # --- URL WEB APP GOOGLE APPS SCRIPT ANDA ---
 WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz-ryJ47OM-ZwV7h-7G5eRgjBGo3IY96xrTC7VR2c5oATUkd6yLgnmYCRsItS6-C8g/exec"
@@ -23,6 +24,12 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 if "keranjang_material" not in st.session_state:
     st.session_state.keranjang_material = []
 
+def clean_string(val):
+    if pd.isna(val):
+        return ""
+    # Normalisasi spasi ganda/berlebih menjadi 1 spasi tunggal
+    return re.sub(r'\s+', ' ', str(val)).strip()
+
 # MENGAMBIL MASTER DATA MATERIAL DARI EXCEL LOKAL REPO
 @st.cache_data(ttl=60)
 def load_master_data():
@@ -33,9 +40,9 @@ def load_master_data():
         df_mat = df_raw.iloc[6:, :].copy()
         
         df_selected = pd.DataFrame()
-        df_selected["JENIS_KONSTRUKSI"] = df_mat.iloc[:, 1].astype(str).str.strip()
-        df_selected["NAMA_MATERIAL"] = df_mat.iloc[:, 2].astype(str).str.strip()
-        df_selected["TYPE_KONSTRUKSI"] = df_mat.iloc[:, 3].astype(str).str.strip()
+        df_selected["JENIS_KONSTRUKSI"] = df_mat.iloc[:, 1].apply(clean_string)
+        df_selected["NAMA_MATERIAL"] = df_mat.iloc[:, 2].apply(clean_string)
+        df_selected["TYPE_KONSTRUKSI"] = df_mat.iloc[:, 3].apply(clean_string)
         
         # Mengambil HARGA MATERIAL (Index 4), JASA PASANG (Index 5), JASA BONGKAR (Index 6)
         df_selected["HARGA_MATERIAL"] = pd.to_numeric(df_mat.iloc[:, 4], errors='coerce').fillna(0.0)
@@ -43,9 +50,9 @@ def load_master_data():
         df_selected["JASA_BONGKAR"] = pd.to_numeric(df_mat.iloc[:, 6], errors='coerce').fillna(0.0)
 
         # Simpan nilai string mentah untuk keperluan tampilan label (misal: memunculkan tulisan "PLN")
-        df_selected["HARGA_MATERIAL_RAW"] = df_mat.iloc[:, 4].fillna("0").astype(str).str.strip()
+        df_selected["HARGA_MATERIAL_RAW"] = df_mat.iloc[:, 4].fillna("0").apply(clean_string)
 
-        df_selected = df_selected.dropna(subset=["NAMA_MATERIAL"])
+        df_selected = df_selected[df_selected["NAMA_MATERIAL"] != ""]
         return df_selected
     except Exception as e:
         st.error(f"Gagal membaca master file '{EXCEL_FILE}'. Detail: {e}")
