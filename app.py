@@ -78,7 +78,7 @@ with col_h2:
 st.markdown("---")
 
 # ==========================================
-# 4. BAGIAN 2: FORM INPUT MATERIAL & PENCARIAN
+# 4. BAGIAN 2: FORM INPUT MATERIAL
 # ==========================================
 st.subheader("2. Form Input Material Pekerjaan")
 
@@ -99,25 +99,11 @@ df_filtered_type = df_filtered_jenis[
 list_mat_all = sorted(df_filtered_type["NAMA MATERIAL"].unique().tolist())
 
 with col_f2:
-    search_keyword = st.text_input(
-        "🔎 Cari Nama Material (Ketik Kata Kunci):",
-        placeholder="Ketik misal: BOLT, ISOLATOR, ARM, CABLE...",
-    )
-
-    if search_keyword.strip():
-        list_mat_display = [
-            m for m in list_mat_all if search_keyword.upper() in m.upper()
-        ]
-        if not list_mat_display:
-            st.warning(
-                f"⚠️ Tidak ditemukan material dengan kata kunci '{search_keyword}'."
-            )
-            list_mat_display = list_mat_all
-    else:
-        list_mat_display = list_mat_all
-
+    # Langsung menggunakan Selectbox yang sudah bawaan fitur pencarian (searchable)
     material_selected = st.selectbox(
-        "3. Pilih Nama Material (Hasil Filter):", list_mat_display
+        "3. Pilih / Cari Nama Material:",
+        list_mat_all,
+        help="Ketik langsung kata kunci material pada kotak untuk mencari.",
     )
 
 st.markdown("---")
