@@ -52,10 +52,20 @@ if "v_pasang" not in st.session_state:
 if "v_bongkar" not in st.session_state:
     st.session_state.v_bongkar = 0
 
+if "pesan_sukses" not in st.session_state:
+    st.session_state.pesan_sukses = False
+
 # ==========================================
 # 3. BAGIAN 1: HEADER PEKERJAAN
 # ==========================================
 st.title("⚡ Sistem Entri Material PLN")
+
+# TAMPILKAN PESAN SUKSES DI ATAS JIKA BARU SAJA SUBMIT
+if st.session_state.pesan_sukses:
+    st.success("🎉 **SELAMAT! DATA BERHASIL DIKIRIM KE GOOGLE SHEET**")
+    st.balloons()  # Efek balon perayaan
+    st.session_state.pesan_sukses = False
+
 st.subheader("1. Header Data Pekerjaan")
 
 col_h1, col_h2 = st.columns(2)
@@ -184,18 +194,17 @@ def hitung_keranjang(list_keranjang, df_master):
     df_cart["Jasa Pasang Satuan"] = merged["JASA PASANG"].fillna(0.0)
     df_cart["Jasa Bongkar Satuan"] = merged["JASA BONGKAR"].fillna(0.0)
 
-    # 1. Biaya Pasang = Jasa Pasang Satuan x Volume Pasang
+    # 1. Biaya Pasang
     df_cart["Biaya Pasang"] = (
         df_cart["Volume Pasang"] * df_cart["Jasa Pasang Satuan"]
     )
 
-    # 2. Biaya Bongkar = Jasa Bongkar Satuan x Volume Bongkar
+    # 2. Biaya Bongkar
     df_cart["Biaya Bongkar"] = (
         df_cart["Volume Bongkar"] * df_cart["Jasa Bongkar Satuan"]
     )
 
-    # 3. Harga Material = Harga Material Satuan x Volume Material
-    # ATURAN: Jika nama material mengandung kata "PLN", harganya 0
+    # 3. Harga Material
     def hitung_biaya_material(row):
         nama_mat = str(row["Material"]).upper()
         if "PLN" in nama_mat:
@@ -231,7 +240,6 @@ if not df_hasil.empty:
         "Biaya Bongkar",
     ]].copy()
 
-    # Tampilan di Streamlit berformat Rupiah
     df_display["Harga Material"] = df_display["Harga Material"].apply(
         lambda x: f"Rp {x:,.0f}"
     )
@@ -272,7 +280,6 @@ with col_act2:
             try:
                 payload = []
                 for item in df_hasil.to_dict("records"):
-                    # MENGIRIM ANGKA MURNI KE GOOGLE SHEETS AGAR TIDAK EROR DESIMAL
                     payload.append({
                         "NAMA PEKERJAAN": nama_pekerjaan,
                         "ALAMAT PEKERJAAN": alamat_pekerjaan,
@@ -290,10 +297,12 @@ with col_act2:
                         "TOTAL ESTIMASI": round(float(total_biaya), 2),
                     })
 
-                response = requests.post(WEBHOOK_URL, json=payload, timeout=15)
+                with st.spinner("Sedang mengunggah data ke Google Sheets..."):
+                    response = requests.post(WEBHOOK_URL, json=payload, timeout=15)
 
                 if response.status_code == 200:
-                    st.success("🎉 Data BERHASIL dikirim dan tersimpan di Google Sheet!")
+                    # SIMPAN STATUS SUKSES & KOSONGKAN KERANJANG
+                    st.session_state.pesan_sukses = True
                     st.session_state.keranjang = []
                     st.rerun()
                 else:
