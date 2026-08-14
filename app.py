@@ -40,7 +40,7 @@ except Exception:
 if "keranjang" not in st.session_state:
     st.session_state.keranjang = []
 
-# Inisialisasi state untuk reset volume otomatis
+# State untuk reset volume otomatis ke 0
 if "v_mat" not in st.session_state:
     st.session_state.v_mat = 0
 if "v_pasang" not in st.session_state:
@@ -74,69 +74,43 @@ with col_h2:
 st.markdown("---")
 
 # ==========================================
-# 4. BAGIAN 2: FORM INPUT MATERIAL & PENCARIAN
+# 4. BAGIAN 2: FORM INPUT MATERIAL
 # ==========================================
 st.subheader("2. Form Input Material Pekerjaan")
 
-# 1. Pilih Jenis Konstruksi
+# Step 1: Filter Jenis Konstruksi
 list_jenis = sorted(df_master["JENIS KONSTRUKSI"].unique().tolist())
 jenis_selected = st.selectbox("Jenis Konstruksi", list_jenis)
 
+# Step 2: Filter Type Konstruksi sesuai Jenis Konstruksi yang dipilih
 df_filtered_jenis = df_master[
     df_master["JENIS KONSTRUKSI"] == jenis_selected
 ]
+list_type = sorted(df_filtered_jenis["TYPE KONSTRUKSI"].unique().tolist())
 
 col_f1, col_f2 = st.columns(2)
 
 with col_f1:
-    # Pencarian Type Konstruksi
-    search_type = st.text_input(
-        "🔍 Cari Type Konstruksi (Ketik kata kunci):", value=""
-    )
-    list_type_all = sorted(
-        df_filtered_jenis["TYPE KONSTRUKSI"].unique().tolist()
+    # Anda bisa langsung mengetik kata kunci pencarian di dalam dropdown ini
+    type_selected = st.selectbox(
+        "Type Konstruksi (Ketik untuk mencari):", list_type
     )
 
-    if search_type.strip():
-        list_type_filtered = [
-            t for t in list_type_all if search_type.upper() in t.upper()
-        ]
-        if not list_type_filtered:
-            st.warning("Type Konstruksi tidak ditemukan.")
-            list_type_filtered = list_type_all
-    else:
-        list_type_filtered = list_type_all
-
-    type_selected = st.selectbox("Pilih Type Konstruksi", list_type_filtered)
-
+# Step 3: Filter Nama Material HANYA yang ada pada Type Konstruksi yang dipilih
 df_filtered_type = df_filtered_jenis[
     df_filtered_jenis["TYPE KONSTRUKSI"] == type_selected
 ]
+list_material = sorted(df_filtered_type["NAMA MATERIAL"].unique().tolist())
 
 with col_f2:
-    # Pencarian Nama Material
-    search_mat = st.text_input(
-        "🔍 Cari Nama Material (Ketik kata kunci):", value=""
+    # Anda bisa langsung mengetik kata kunci pencarian material di dalam dropdown ini
+    material_selected = st.selectbox(
+        "Nama Material (Ketik untuk mencari):", list_material
     )
-    list_mat_all = sorted(
-        df_filtered_type["NAMA MATERIAL"].unique().tolist()
-    )
-
-    if search_mat.strip():
-        list_mat_filtered = [
-            m for m in list_mat_all if search_mat.upper() in m.upper()
-        ]
-        if not list_mat_filtered:
-            st.warning("Nama Material tidak ditemukan.")
-            list_mat_filtered = list_mat_all
-    else:
-        list_mat_filtered = list_mat_all
-
-    material_selected = st.selectbox("Pilih Nama Material", list_mat_filtered)
 
 st.markdown("---")
 
-# Input Volume (Menggunakan Session State agar dapat di-reset ke 0)
+# Input Volume (Dengan Reset Otomatis ke 0)
 col_v1, col_v2, col_v3, col_v4 = st.columns([1, 1, 1, 1.2])
 
 with col_v1:
@@ -153,14 +127,14 @@ with col_v3:
     )
 
 
-# Fungsi Callback saat Klik Tambah Material
+# Fungsi Callback untuk Menambah Item & Reset Volume ke 0
 def tambah_ke_keranjang():
     if (
         st.session_state.v_mat == 0
         and st.session_state.v_pasang == 0
         and st.session_state.v_bongkar == 0
     ):
-        st.toast("⚠️ Harap isi volume terlebih dahulu sebelum menambahkan!")
+        st.toast("⚠️ Harap isi volume terlebih dahulu!")
         return
 
     item_baru = {
@@ -173,7 +147,7 @@ def tambah_ke_keranjang():
     }
     st.session_state.keranjang.append(item_baru)
 
-    # RESET OTOMATIS VALUE VOLUME MENJADI 0
+    # Reset otomatis volume ke 0 setelah berhasil ditambahkan
     st.session_state.v_mat = 0
     st.session_state.v_pasang = 0
     st.session_state.v_bongkar = 0
@@ -204,6 +178,7 @@ def hitung_keranjang(list_keranjang, df_master):
 
     df_cart = pd.DataFrame(list_keranjang)
 
+    # Lookup Harga dari Master Data
     merged = pd.merge(
         df_cart,
         df_master,
@@ -216,6 +191,7 @@ def hitung_keranjang(list_keranjang, df_master):
     df_cart["Harga Pasang Satuan"] = merged["JASA PASANG"].fillna(0.0)
     df_cart["Harga Bongkar Satuan"] = merged["JASA BONGKAR"].fillna(0.0)
 
+    # Hitung Subtotal
     df_cart["Biaya Material"] = (
         df_cart["Volume Material"] * df_cart["Harga Material Satuan"]
     )
@@ -250,6 +226,7 @@ if not df_hasil.empty:
         "Biaya Pasang",
     ]].copy()
 
+    # Format Rupiah
     df_display["Harga Material Satuan"] = df_display[
         "Harga Material Satuan"
     ].apply(lambda x: f"Rp {x:,.0f}")
