@@ -161,7 +161,7 @@ with col_v4:
 st.markdown("---")
 
 # ==========================================
-# 5. BAGIAN 3: KERANJANG & PERHITUNGAN BIAYA
+# 5. BAGIAN 3: KERANJANG & LOGIKA PERHITUNGAN
 # ==========================================
 st.subheader("3. Keranjang Input Material")
 
@@ -172,7 +172,6 @@ def hitung_keranjang(list_keranjang, df_master):
 
     df_cart = pd.DataFrame(list_keranjang)
 
-    # Lakukan merge dengan database master
     merged = pd.merge(
         df_cart,
         df_master,
@@ -181,26 +180,39 @@ def hitung_keranjang(list_keranjang, df_master):
         how="left",
     )
 
+    # Ambil harga satuan dari master
     df_cart["Harga Material Satuan"] = merged["HARGA MATERIAL"].fillna(0.0)
-    df_cart["Harga Pasang Satuan"] = merged["JASA PASANG"].fillna(0.0)
-    df_cart["Harga Bongkar Satuan"] = merged["JASA BONGKAR"].fillna(0.0)
+    df_cart["Jasa Pasang Satuan"] = merged["JASA PASANG"].fillna(0.0)
+    df_cart["Jasa Bongkar Satuan"] = merged["JASA BONGKAR"].fillna(0.0)
 
-    # Perhitungan Biaya
-    df_cart["Biaya Material"] = (
-        df_cart["Volume Material"] * df_cart["Harga Material Satuan"]
-    )
+    # Hitung Jasa Pasang = Jasa Pasang Satuan x Volume Pasang
     df_cart["Biaya Pasang"] = (
-        df_cart["Volume Pasang"] * df_cart["Harga Pasang Satuan"]
-    )
-    df_cart["Biaya Bongkar"] = (
-        df_cart["Volume Bongkar"] * df_cart["Harga Bongkar Satuan"]
+        df_cart["Volume Pasang"] * df_cart["Jasa Pasang Satuan"]
     )
 
-    total_estimasi = (
-        df_cart["Biaya Material"].sum()
-        + df_cart["Biaya Pasang"].sum()
-        + df_cart["Biaya Bongkar"].sum()
+    # Hitung Jasa Bongkar = Jasa Bongkar Satuan x Volume Bongkar
+    df_cart["Biaya Bongkar"] = (
+        df_cart["Volume Bongkar"] * df_cart["Jasa Bongkar Satuan"]
     )
+
+    # Hitung Harga Material = Harga Material Satuan x Volume Material
+    # ATURAN KHUSUS: Jika nama material mengandung kata "PLN", hasilnya 0
+    def hitung_biaya_material(row):
+        nama_mat = str(row["Material"]).upper()
+        if "PLN" in nama_mat:
+            return 0.0
+        return row["Volume Material"] * row["Harga Material Satuan"]
+
+    df_cart["Harga Material"] = df_cart.apply(hitung_biaya_material, axis=1)
+
+    # Total Estimasi Pekerjaan per baris
+    df_cart["Total Subtotal"] = (
+        df_cart["Harga Material"]
+        + df_cart["Biaya Pasang"]
+        + df_cart["Biaya Bongkar"]
+    )
+
+    total_estimasi = df_cart["Total Subtotal"].sum()
 
     return df_cart, total_estimasi
 
@@ -208,7 +220,7 @@ def hitung_keranjang(list_keranjang, df_master):
 df_hasil, total_biaya = hitung_keranjang(st.session_state.keranjang, df_master)
 
 if not df_hasil.empty:
-    # Memilih kolom yang lengkap termasuk Biaya Bongkar
+    # Menyiapkan DataFrame khusus tampilan
     df_display = df_hasil[[
         "Jenis Konstruksi",
         "Type Konstruksi",
@@ -216,16 +228,13 @@ if not df_hasil.empty:
         "Volume Material",
         "Volume Pasang",
         "Volume Bongkar",
-        "Harga Material Satuan",
-        "Biaya Material",
+        "Harga Material",
         "Biaya Pasang",
-        "Biaya Bongkar",  # <--- DITAMBAHKAN AGAR MUNCUL DI TABEL
+        "Biaya Bongkar",
     ]].copy()
 
-    df_display["Harga Material Satuan"] = df_display[
-        "Harga Material Satuan"
-    ].apply(lambda x: f"Rp {x:,.0f}")
-    df_display["Biaya Material"] = df_display["Biaya Material"].apply(
+    # Format angka ke Rupiah
+    df_display["Harga Material"] = df_display["Harga Material"].apply(
         lambda x: f"Rp {x:,.0f}"
     )
     df_display["Biaya Pasang"] = df_display["Biaya Pasang"].apply(
@@ -276,10 +285,9 @@ with col_act2:
                         "VOL MATERIAL": item["Volume Material"],
                         "VOL PASANG": item["Volume Pasang"],
                         "VOL BONGKAR": item["Volume Bongkar"],
-                        "HARGA MATERIAL": item["Harga Material Satuan"],
-                        "BIAYA MATERIAL": item["Biaya Material"],
+                        "HARGA MATERIAL": item["Harga Material"],
                         "BIAYA PASANG": item["Biaya Pasang"],
-                        "BIAYA BONGKAR": item["Biaya Bongkar"],  # <--- DISERTAKAN KE SHEETS
+                        "BIAYA BONGKAR": item["Biaya Bongkar"],
                         "TOTAL ESTIMASI": total_biaya,
                     })
 
