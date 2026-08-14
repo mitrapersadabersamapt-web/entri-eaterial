@@ -3,12 +3,15 @@ import pandas as pd
 from streamlit_gsheets import GSheetsConnection
 import datetime
 
+# --- URL GOOGLE SHEETS ANDA ---
+SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1DUnC28hWJPXVKAamJSHv2t3LR2wdVCq-jegYJKIPAQY/edit?usp=sharing"
+
 EXCEL_FILE = "MATERIAL 1.xlsx"
 SHEET_NAME = "HEADER APLIKASI"
 
 st.set_page_config(page_title="Sistem Entri Material PLN", layout="wide", page_icon="⚡")
 
-st.title("⚡ Sistem Entri Material PLN (Connected to Google Sheets)")
+st.title("⚡ Sistem Entri Material PLN")
 
 # Inisialisasi Koneksi Google Sheets
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -151,10 +154,9 @@ if len(st.session_state.keranjang_material) > 0:
                 st.error("Isi Nama Pekerjaan terlebih dahulu!")
             else:
                 try:
-                    # Ambil data eksisting dari Google Sheets
-                    existing_data = conn.read(ttl=0)
+                    # Ambil data eksisting menggunakan URL
+                    existing_data = conn.read(spreadsheet=SPREADSHEET_URL, ttl=0)
                     
-                    # Buat DataFrame baru dari inputan keranjang
                     new_rows = []
                     for item in st.session_state.keranjang_material:
                         new_rows.append({
@@ -173,8 +175,8 @@ if len(st.session_state.keranjang_material) > 0:
                     df_new = pd.DataFrame(new_rows)
                     updated_df = pd.concat([existing_data, df_new], ignore_index=True)
                     
-                    # Update data ke Google Sheets
-                    conn.update(data=updated_df)
+                    # Update data ke Google Sheets menggunakan URL
+                    conn.update(spreadsheet=SPREADSHEET_URL, data=updated_df)
                     
                     st.balloons()
                     st.success("✅ Berhasil menyimpan transaksi ke Google Sheets!")
@@ -186,10 +188,10 @@ else:
 
 st.divider()
 
-# --- 4. TAMPILKAN REKAP DATA REAK-TIME ---
+# --- 4. TAMPILKAN REKAP DATA REAL-TIME ---
 st.subheader("📊 Rekap Data Masuk (Real-Time Google Sheets)")
 try:
-    df_rekap = conn.read(ttl=0)
+    df_rekap = conn.read(spreadsheet=SPREADSHEET_URL, ttl=0)
     st.dataframe(df_rekap, use_container_width=True)
 except Exception:
     st.write("Belum dapat memuat rekap data.")
