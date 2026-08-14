@@ -18,7 +18,7 @@ def load_and_clean_master(filepath):
         if col in df.columns:
             df[col] = df[col].astype(str).str.strip()
 
-    # Konversi Kolom Harga & Jasa ke Tipe Data Angka
+    # Konversi Kolom Harga & Jasa ke Tipe Data Angka (Numeric)
     numeric_cols = ["HARGA MATERIAL", "JASA PASANG", "JASA BONGKAR"]
     for col in numeric_cols:
         if col in df.columns:
@@ -38,18 +38,67 @@ except Exception:
         st.stop()
 
 # ==========================================
-# 2. INISIALISASI SESSION STATE KERANJANG
+# 2. INISIALISASI SESSION STATE
 # ==========================================
 if "keranjang" not in st.session_state:
     st.session_state.keranjang = []
 
 # ==========================================
-# 3. FORM ENTRI MATERIAL (BAGIAN ATAS)
+# 3. BAGIAN 1: HEADER DATA PEKERJAAN & PELANGGAN
 # ==========================================
 st.title("⚡ Sistem Entri Material PLN")
+st.subheader("1. Header Data Pekerjaan")
+
+col_h1, col_h2 = st.columns(2)
+
+with col_h1:
+    no_agenda = st.text_input(
+        "No. Agenda / SPK", value="", placeholder="Masukkan Nomor Agenda..."
+    )
+    nama_pelanggan = st.text_input(
+        "Nama Pelanggan",
+        value="",
+        placeholder="Masukkan Nama Pelanggan / Lokasi...",
+    )
+    alamat = st.text_area(
+        "Alamat Pekerjaan", value="", placeholder="Masukkan Alamat Lengkap..."
+    )
+
+with col_h2:
+    unit_up3 = st.selectbox(
+        "Unit / ULP", ["ULP KOTA", "ULP TIMUR", "ULP BARAT", "ULP SELATAN"]
+    )
+    daya_pasang = st.selectbox(
+        "Daya (VA)",
+        [
+            "450 VA",
+            "900 VA",
+            "1300 VA",
+            "2200 VA",
+            "3500 VA",
+            "5500 VA",
+            "11000 VA",
+            "Lainnya",
+        ],
+    )
+    jenis_pekerjaan = st.selectbox(
+        "Jenis Pekerjaan",
+        [
+            "PASANG BARU (PB)",
+            "TAMBAH DAYA (TD)",
+            "GESER TIANG / GARDU",
+            "PEMELIHARAAN JARINGAN",
+        ],
+    )
+
+st.markdown("---")
+
+# ==========================================
+# 4. BAGIAN 2: FORM INPUT MATERIAL
+# ==========================================
 st.subheader("2. Form Input Material Pekerjaan")
 
-# Pilihan Dropdown Dinamis
+# Dropdown Dinamis dari Master Data
 list_jenis = sorted(df_master["JENIS KONSTRUKSI"].unique().tolist())
 
 col_f1, col_f2, col_f3 = st.columns(3)
@@ -71,8 +120,6 @@ list_material = sorted(df_filtered_mat["NAMA MATERIAL"].unique().tolist())
 with col_f3:
     material_selected = st.selectbox("Nama Material", list_material)
 
-st.markdown("---")
-
 # Input Volume dan Tombol Tambah
 col_v1, col_v2, col_v3, col_v4 = st.columns([1, 1, 1, 1.2])
 
@@ -90,7 +137,7 @@ with col_v4:
     st.write(" ")
     btn_tambah = st.button("➕ Tambah ke Keranjang", use_container_width=True)
 
-# Tambah item saat tombol diklik
+# Logika Tambah Item ke Keranjang
 if btn_tambah:
     item_baru = {
         "Jenis Konstruksi": jenis_selected,
@@ -101,12 +148,12 @@ if btn_tambah:
         "Volume Bongkar": vol_bongkar,
     }
     st.session_state.keranjang.append(item_baru)
-    st.success("Item berhasil ditambahkan ke keranjang!")
+    st.success("Item berhasil ditambahkan!")
 
 st.markdown("---")
 
 # ==========================================
-# 4. KERANJANG & PERHITUNGAN BIAYA
+# 5. BAGIAN 3: KERANJANG & PERHITUNGAN BIAYA
 # ==========================================
 st.subheader("3. Keranjang Input Material")
 
@@ -117,7 +164,7 @@ def hitung_keranjang(list_keranjang, df_master):
 
     df_cart = pd.DataFrame(list_keranjang)
 
-    # Lookup Harga dari Master Data
+    # Match dengan Master Database berdasarkan Jenis, Type, dan Nama Material
     merged = pd.merge(
         df_cart,
         df_master,
@@ -199,4 +246,10 @@ with col_act2:
         type="primary",
         use_container_width=True,
     ):
-        st.success("Data berhasil disubmit ke Google Sheets!")
+        if not no_agenda:
+            st.warning("Silakan isi No. Agenda sebelum mengirim data.")
+        else:
+            st.success(
+                f"Data untuk Agenda '{no_agenda}' berhasil disubmit ke Google"
+                " Sheets!"
+            )
