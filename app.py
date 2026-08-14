@@ -2,8 +2,12 @@ import streamlit as st
 import pandas as pd
 from streamlit_gsheets import GSheetsConnection
 import datetime
+import requests
 
-# --- URL GOOGLE SHEETS ANDA ---
+# --- URL WEB APP GOOGLE APPS SCRIPT ANDA ---
+WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz-ryJ47OM-ZwV7h-7G5eRgjBGo3IY96xrTC7VR2c5oATUkd6yLgnmYCRsItS6-C8g/exec"
+
+# URL Spreadsheet untuk membaca/menampilkan rekap data
 SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1DUnC28hWJPXVKAamJSHv2t3LR2wdVCq-jegYJKIPAQY/edit?usp=sharing"
 
 EXCEL_FILE = "MATERIAL 1.xlsx"
@@ -13,7 +17,6 @@ st.set_page_config(page_title="Sistem Entri Material PLN", layout="wide", page_i
 
 st.title("⚡ Sistem Entri Material PLN")
 
-# Inisialisasi Koneksi Google Sheets
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # --- INITIALIZE SESSION STATE ---
@@ -154,12 +157,9 @@ if len(st.session_state.keranjang_material) > 0:
                 st.error("Isi Nama Pekerjaan terlebih dahulu!")
             else:
                 try:
-                    # Ambil data eksisting menggunakan URL
-                    existing_data = conn.read(spreadsheet=SPREADSHEET_URL, ttl=0)
-                    
-                    new_rows = []
+                    payload = []
                     for item in st.session_state.keranjang_material:
-                        new_rows.append({
+                        payload.append({
                             "Nama Pekerjaan": nama_pekerjaan,
                             "Alamat Pekerjaan": alamat_pekerjaan,
                             "Jenis Pekerjaan": jenis_pekerjaan,
@@ -172,15 +172,16 @@ if len(st.session_state.keranjang_material) > 0:
                             "Volume Bongkar": item["Volume Bongkar"]
                         })
                     
-                    df_new = pd.DataFrame(new_rows)
-                    updated_df = pd.concat([existing_data, df_new], ignore_index=True)
+                    # Kirim data via HTTP POST ke Apps Script
+                    response = requests.post(WEB_APP_URL, json=payload)
                     
-                    # Update data ke Google Sheets menggunakan URL
-                    conn.update(spreadsheet=SPREADSHEET_URL, data=updated_df)
-                    
-                    st.balloons()
-                    st.success("✅ Berhasil menyimpan transaksi ke Google Sheets!")
-                    st.session_state.keranjang_material = []
+                    if response.status_code == 200:
+                        st.balloons()
+                        st.success("✅ Berhasil menyimpan transaksi ke Google Sheets!")
+                        st.session_state.keranjang_material = []
+                        st.rerun()
+                    else:
+                        st.error(f"Gagal mengirim data. Response Code: {response.status_code}")
                 except Exception as err:
                     st.error(f"Gagal menyimpan data ke Google Sheets. Detail: {err}")
 else:
