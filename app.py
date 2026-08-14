@@ -99,7 +99,6 @@ df_filtered_type = df_filtered_jenis[
 list_mat_all = sorted(df_filtered_type["NAMA MATERIAL"].unique().tolist())
 
 with col_f2:
-    # Langsung menggunakan Selectbox yang sudah bawaan fitur pencarian (searchable)
     material_selected = st.selectbox(
         "3. Pilih / Cari Nama Material:",
         list_mat_all,
@@ -173,6 +172,7 @@ def hitung_keranjang(list_keranjang, df_master):
 
     df_cart = pd.DataFrame(list_keranjang)
 
+    # Lakukan merge dengan database master
     merged = pd.merge(
         df_cart,
         df_master,
@@ -185,6 +185,7 @@ def hitung_keranjang(list_keranjang, df_master):
     df_cart["Harga Pasang Satuan"] = merged["JASA PASANG"].fillna(0.0)
     df_cart["Harga Bongkar Satuan"] = merged["JASA BONGKAR"].fillna(0.0)
 
+    # Perhitungan Biaya
     df_cart["Biaya Material"] = (
         df_cart["Volume Material"] * df_cart["Harga Material Satuan"]
     )
@@ -207,6 +208,7 @@ def hitung_keranjang(list_keranjang, df_master):
 df_hasil, total_biaya = hitung_keranjang(st.session_state.keranjang, df_master)
 
 if not df_hasil.empty:
+    # Memilih kolom yang lengkap termasuk Biaya Bongkar
     df_display = df_hasil[[
         "Jenis Konstruksi",
         "Type Konstruksi",
@@ -217,6 +219,7 @@ if not df_hasil.empty:
         "Harga Material Satuan",
         "Biaya Material",
         "Biaya Pasang",
+        "Biaya Bongkar",  # <--- DITAMBAHKAN AGAR MUNCUL DI TABEL
     ]].copy()
 
     df_display["Harga Material Satuan"] = df_display[
@@ -226,6 +229,9 @@ if not df_hasil.empty:
         lambda x: f"Rp {x:,.0f}"
     )
     df_display["Biaya Pasang"] = df_display["Biaya Pasang"].apply(
+        lambda x: f"Rp {x:,.0f}"
+    )
+    df_display["Biaya Bongkar"] = df_display["Biaya Bongkar"].apply(
         lambda x: f"Rp {x:,.0f}"
     )
 
@@ -257,7 +263,6 @@ with col_act2:
             st.error("❌ Harap isi NAMA PEKERJAAN pada Header!")
         else:
             try:
-                # Menyiapkan payload JSON
                 payload = []
                 for item in df_hasil.to_dict("records"):
                     payload.append({
@@ -274,15 +279,15 @@ with col_act2:
                         "HARGA MATERIAL": item["Harga Material Satuan"],
                         "BIAYA MATERIAL": item["Biaya Material"],
                         "BIAYA PASANG": item["Biaya Pasang"],
+                        "BIAYA BONGKAR": item["Biaya Bongkar"],  # <--- DISERTAKAN KE SHEETS
                         "TOTAL ESTIMASI": total_biaya,
                     })
 
-                # Kirim data HTTP POST ke Google Apps Script Webhook
                 response = requests.post(WEBHOOK_URL, json=payload, timeout=15)
 
                 if response.status_code == 200:
                     st.success("🎉 Data BERHASIL dikirim dan tersimpan di Google Sheet!")
-                    st.session_state.keranjang = []  # Kosongkan keranjang
+                    st.session_state.keranjang = []
                     st.rerun()
                 else:
                     st.error(f"⚠️ Gagal mengirim data. Status Code: {response.status_code}")
