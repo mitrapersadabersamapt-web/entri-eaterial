@@ -28,16 +28,29 @@ if "keranjang_material" not in st.session_state:
 def load_master_data():
     try:
         df_raw = pd.read_excel(EXCEL_FILE, sheet_name=SHEET_NAME, header=None)
-        df_mat = df_raw.iloc[6:, [1, 2, 3]].dropna(subset=[2])
-        df_mat.columns = ["JENIS_KONSTRUKSI", "NAMA_MATERIAL", "TYPE_KONSTRUKSI"]
         
-        df_mat["JENIS_KONSTRUKSI"] = df_mat["JENIS_KONSTRUKSI"].astype(str).str.strip()
-        df_mat["NAMA_MATERIAL"] = df_mat["NAMA_MATERIAL"].astype(str).str.strip()
-        df_mat["TYPE_KONSTRUKSI"] = df_mat["TYPE_KONSTRUKSI"].astype(str).str.strip()
-        return df_mat
+        # Mengambil baris data mulai indeks ke-6
+        df_mat = df_raw.iloc[6:, :].copy()
+        
+        df_selected = pd.DataFrame()
+        df_selected["JENIS_KONSTRUKSI"] = df_mat.iloc[:, 1].astype(str).str.strip()
+        df_selected["NAMA_MATERIAL"] = df_mat.iloc[:, 2].astype(str).str.strip()
+        df_selected["TYPE_KONSTRUKSI"] = df_mat.iloc[:, 3].astype(str).str.strip()
+        
+        # Mengambil kolom HARGA MATERIAL (Kolom Index 4), JASA PASANG (Kolom Index 5), JASA BONGKAR (Kolom Index 6)
+        # Jika nilai berisi 'PLN' atau teks non-angka, pd.to_numeric dengan errors='coerce' akan mengubahnya menjadi NaN, lalu fillna(0) mengubahnya menjadi 0 (NOL)
+        df_selected["HARGA_MATERIAL"] = pd.to_numeric(df_mat.iloc[:, 4], errors='coerce').fillna(0.0)
+        df_selected["JASA_PASANG"] = pd.to_numeric(df_mat.iloc[:, 5], errors='coerce').fillna(0.0)
+        df_selected["JASA_BONGKAR"] = pd.to_numeric(df_mat.iloc[:, 6], errors='coerce').fillna(0.0)
+
+        # Simpan nilai string mentah untuk keperluan tampilan label (misal: memunculkan tulisan "PLN")
+        df_selected["HARGA_MATERIAL_RAW"] = df_mat.iloc[:, 4].astype(str).str.strip()
+
+        df_selected = df_selected.dropna(subset=["NAMA_MATERIAL"])
+        return df_selected
     except Exception as e:
         st.error(f"Gagal membaca master file '{EXCEL_FILE}'. Detail: {e}")
-        return pd.DataFrame(columns=["JENIS_KONSTRUKSI", "NAMA_MATERIAL", "TYPE_KONSTRUKSI"])
+        return pd.DataFrame(columns=["JENIS_KONSTRUKSI", "NAMA_MATERIAL", "TYPE_KONSTRUKSI", "HARGA_MATERIAL", "JASA_PASANG", "JASA_BONGKAR", "HARGA_MATERIAL_RAW"])
 
 df_master = load_master_data()
 
@@ -119,13 +132,26 @@ if tambah_btn:
         if volume_material == 0 and volume_pasang == 0 and volume_bongkar == 0:
             st.warning("Minimal salah satu volume (Material / Pasang / Bongkar) harus diisi > 0!")
         else:
-            # PERBAIKAN: Cari Type Konstruksi langsung dari daftar df_final_mat yang sudah difilter
             row_match = df_final_mat[df_final_mat["NAMA_MATERIAL"] == selected_material]
             
             if not row_match.empty:
                 type_konstruksi_val = row_match["TYPE_KONSTRUKSI"].values[0]
+                harga_mat = float(row_match["HARGA_MATERIAL"].values[0])
+                harga_pasang = float(row_match["JASA_PASANG"].values[0])
+                harga_bongkar = float(row_match["JASA_BONGKAR"].values[0])
+                harga_mat_raw = row_match["HARGA_MATERIAL_RAW"].values[0]
             else:
                 type_konstruksi_val = selected_type_konstruksi if selected_type_konstruksi != "-- Semua Type --" else "-"
+                harga_mat, harga_pasang, harga_bongkar = 0.0, 0.0, 0.0
+                harga_mat_raw = "0"
+
+            # Hitung biaya perkalian (Jika PLN -> harga_mat = 0, sehingga total_biaya_mat = 0)
+            total_biaya_mat = volume_material * harga_mat
+            total_biaya_pasang = volume_pasang * harga_pasang
+            total_biaya_bongkar = volume_bongkar * harga_bongkar
+            
+            # Estimasi Harga = Jumlah Total Biaya Material + Pasang + Bongkar
+            estimasi_harga = total_biaya_mat + total_biaya_pasang + total_biaya_bongkar
 
             st.session_state.keranjang_material.append({
                 "Jenis Konstruksi": selected_jenis_konstruksi,
@@ -133,7 +159,12 @@ if tambah_btn:
                 "Material": selected_material,
                 "Volume Material": volume_material,
                 "Volume Pasang": volume_pasang,
-                "Volume Bongkar": volume_bongkar
+                "Volume Bongkar": volume_bongkar,
+                "Harga Material Satuan": "PLN" if "PLN" in harga_mat_raw.upper() else f"Rp {harga_mat:,.0f}",
+                "Biaya Material": total_biaya_mat,
+                "Biaya Pasang": total_biaya_pasang,
+                "Biaya Bongkar": total_biaya_bongkar,
+                "Estimasi Harga": estimasi_harga
             })
             st.success(f"'{selected_material}' ({type_konstruksi_val}) berhasil ditambahkan ke keranjang!")
             st.rerun()
@@ -145,7 +176,13 @@ st.subheader("3. Keranjang Input Material")
 
 if len(st.session_state.keranjang_material) > 0:
     df_keranjang = pd.DataFrame(st.session_state.keranjang_material)
+    
+    # Format Tampilan Tabel Keranjang
     st.dataframe(df_keranjang, use_container_width=True)
+
+    # Hitung total estimasi harga seluruh keranjang
+    total_estimasi_semua = df_keranjang["Estimasi Harga"].sum()
+    st.metric(label="💰 TOTAL ESTIMASI HARGA PEKERJAAN", value=f"Rp {total_estimasi_semua:,.2f}")
 
     col_clear, col_submit = st.columns([2, 8])
     with col_clear:
@@ -171,15 +208,19 @@ if len(st.session_state.keranjang_material) > 0:
                             "Material": item["Material"],
                             "Volume Material": item["Volume Material"],
                             "Volume Pasang": item["Volume Pasang"],
-                            "Volume Bongkar": item["Volume Bongkar"]
+                            "Volume Bongkar": item["Volume Bongkar"],
+                            "Harga Material Satuan": item["Harga Material Satuan"],
+                            "Biaya Material": item["Biaya Material"],
+                            "Biaya Pasang": item["Biaya Pasang"],
+                            "Biaya Bongkar": item["Biaya Bongkar"],
+                            "Estimasi Harga": item["Estimasi Harga"]
                         })
                     
-                    # Kirim data via HTTP POST ke Apps Script
                     response = requests.post(WEB_APP_URL, json=payload)
                     
                     if response.status_code == 200:
                         st.balloons()
-                        st.success("✅ Berhasil menyimpan transaksi ke Google Sheets!")
+                        st.success("✅ Berhasil menyimpan transaksi dan estimasi harga ke Google Sheets!")
                         st.session_state.keranjang_material = []
                         st.rerun()
                     else:
