@@ -24,13 +24,26 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 if "keranjang_material" not in st.session_state:
     st.session_state.keranjang_material = []
 
-def clean_string(val):
+def clean_str(val):
     if pd.isna(val):
         return ""
+    # Menghapus spasi ganda dan spasi di awal/akhir
     return re.sub(r'\s+', ' ', str(val)).strip()
 
-# MENGAMBIL MASTER DATA MATERIAL DARI EXCEL LOKAL REPO
-@st.cache_data(ttl=60)
+def parse_number(val):
+    if pd.isna(val):
+        return 0.0
+    val_str = str(val).strip()
+    if "PLN" in val_str.upper():
+        return 0.0
+    try:
+        # Bersihkan karakter selain angka, titik, dan minus
+        cleaned = re.sub(r'[^0-9.-]', '', val_str)
+        return float(cleaned) if cleaned else 0.0
+    except Exception:
+        return 0.0
+
+# MENGAMBIL MASTER DATA MATERIAL DARI EXCEL LOKAL REPO (TANPA CACHE AGAR SELALU UPDATE)
 def load_master_data():
     try:
         df_raw = pd.read_excel(EXCEL_FILE, sheet_name=SHEET_NAME, header=None)
@@ -39,17 +52,17 @@ def load_master_data():
         df_mat = df_raw.iloc[6:, :].copy()
         
         df_selected = pd.DataFrame()
-        df_selected["JENIS_KONSTRUKSI"] = df_mat.iloc[:, 1].apply(clean_string)
-        df_selected["NAMA_MATERIAL"] = df_mat.iloc[:, 2].apply(clean_string)
-        df_selected["TYPE_KONSTRUKSI"] = df_mat.iloc[:, 3].apply(clean_string)
+        df_selected["JENIS_KONSTRUKSI"] = df_mat.iloc[:, 1].apply(clean_str)
+        df_selected["NAMA_MATERIAL"] = df_mat.iloc[:, 2].apply(clean_str)
+        df_selected["TYPE_KONSTRUKSI"] = df_mat.iloc[:, 3].apply(clean_str)
         
-        # Mengambil HARGA MATERIAL (Index 4), JASA PASANG (Index 5), JASA BONGKAR (Index 6)
-        df_selected["HARGA_MATERIAL"] = pd.to_numeric(df_mat.iloc[:, 4], errors='coerce').fillna(0.0)
-        df_selected["JASA_PASANG"] = pd.to_numeric(df_mat.iloc[:, 5], errors='coerce').fillna(0.0)
-        df_selected["JASA_BONGKAR"] = pd.to_numeric(df_mat.iloc[:, 6], errors='coerce').fillna(0.0)
+        # Parse Angka
+        df_selected["HARGA_MATERIAL"] = df_mat.iloc[:, 4].apply(parse_number)
+        df_selected["JASA_PASANG"] = df_mat.iloc[:, 5].apply(parse_number)
+        df_selected["JASA_BONGKAR"] = df_mat.iloc[:, 6].apply(parse_number)
 
-        # Simpan nilai string mentah untuk keperluan tampilan label (misal: memunculkan tulisan "PLN")
-        df_selected["HARGA_MATERIAL_RAW"] = df_mat.iloc[:, 4].fillna("0").apply(clean_string)
+        # Nilai mentah untuk label
+        df_selected["HARGA_MATERIAL_RAW"] = df_mat.iloc[:, 4].fillna("0").apply(clean_str)
 
         df_selected = df_selected[df_selected["NAMA_MATERIAL"] != ""]
         return df_selected
@@ -84,7 +97,12 @@ else:
 col_filter1, col_filter2 = st.columns(2)
 
 with col_filter1:
-    selected_jenis_konstruksi = st.selectbox("📌 Pilih Jenis Konstruksi", options=list_jenis_konstruksi, index=0 if list_jenis_konstruksi else None)
+    selected_jenis_konstruksi = st.selectbox(
+        "📌 Pilih Jenis Konstruksi", 
+        options=list_jenis_konstruksi, 
+        index=0 if list_jenis_konstruksi else None,
+        key="sel_jenis_k"
+    )
 
 if selected_jenis_konstruksi:
     df_filtered_type = df_master[df_master["JENIS_KONSTRUKSI"] == selected_jenis_konstruksi]
@@ -97,7 +115,8 @@ with col_filter2:
     selected_type_konstruksi = st.selectbox(
         "🏷️ Filter Type Konstruksi (Opsional)", 
         options=["-- Semua Type --"] + list_type_konstruksi,
-        index=0
+        index=0,
+        key="sel_type_k"
     )
 
 df_final_mat = df_filtered_type.copy()
@@ -137,17 +156,12 @@ if tambah_btn:
         if volume_material == 0 and volume_pasang == 0 and volume_bongkar == 0:
             st.warning("Minimal salah satu volume (Material / Pasang / Bongkar) harus diisi > 0!")
         else:
-            # PENCARIAN LANGSUNG KE MASTER DATA (TIDAK BERGANTUNG FILTER FORM)
-            row_match = df_master[
-                (df_master["JENIS_KONSTRUKSI"] == selected_jenis_konstruksi) & 
-                (df_master["NAMA_MATERIAL"] == selected_material)
-            ]
+            # PENCARIAN MATCHING DARI DF_MASTER
+            match_cond = (df_master["NAMA_MATERIAL"] == selected_material)
+            if selected_jenis_konstruksi:
+                match_cond = match_cond & (df_master["JENIS_KONSTRUKSI"] == selected_jenis_konstruksi)
             
-            # Jika difilter per type, sesuaikan spesifik ke type-nya
-            if selected_type_konstruksi and selected_type_konstruksi != "-- Semua Type --":
-                row_match_type = row_match[row_match["TYPE_KONSTRUKSI"] == selected_type_konstruksi]
-                if not row_match_type.empty:
-                    row_match = row_match_type
+            row_match = df_master[match_cond]
 
             if not row_match.empty:
                 type_konstruksi_val = row_match["TYPE_KONSTRUKSI"].values[0]
@@ -165,7 +179,7 @@ if tambah_btn:
             total_biaya_pasang = volume_pasang * harga_pasang
             total_biaya_bongkar = volume_bongkar * harga_bongkar
             
-            # Estimasi Harga = Total Material + Pasang + Bongkar
+            # Estimasi Harga Total Item Ini
             estimasi_harga = total_biaya_mat + total_biaya_pasang + total_biaya_bongkar
 
             # Format label harga satuan
