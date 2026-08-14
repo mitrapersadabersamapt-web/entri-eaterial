@@ -1,5 +1,6 @@
 import pandas as pd
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
 
 st.set_page_config(
     page_title="Sistem Entri Material PLN", layout="wide"
@@ -40,7 +41,6 @@ except Exception:
 if "keranjang" not in st.session_state:
     st.session_state.keranjang = []
 
-# State untuk reset otomatis nilai volume ke 0
 if "v_mat" not in st.session_state:
     st.session_state.v_mat = 0
 if "v_pasang" not in st.session_state:
@@ -78,43 +78,37 @@ st.markdown("---")
 # ==========================================
 st.subheader("2. Form Input Material Pekerjaan")
 
-# Step 1: Pilih Jenis Konstruksi
 list_jenis = sorted(df_master["JENIS KONSTRUKSI"].unique().tolist())
 jenis_selected = st.selectbox("1. Pilih Jenis Konstruksi:", list_jenis)
 
-# Filter Master Data berdasarkan Jenis Konstruksi
 df_filtered_jenis = df_master[
     df_master["JENIS KONSTRUKSI"] == jenis_selected
 ]
 
 col_f1, col_f2 = st.columns(2)
 
-# Step 2: Pilih Type Konstruksi
 with col_f1:
     list_type = sorted(df_filtered_jenis["TYPE KONSTRUKSI"].unique().tolist())
     type_selected = st.selectbox("2. Pilih Type Konstruksi:", list_type)
 
-# Filter Master Data HANYA untuk Type Konstruksi yang dipilih
 df_filtered_type = df_filtered_jenis[
     df_filtered_jenis["TYPE KONSTRUKSI"] == type_selected
 ]
 list_mat_all = sorted(df_filtered_type["NAMA MATERIAL"].unique().tolist())
 
-# Step 3: Pencarian dan Pemilihan Nama Material
 with col_f2:
     search_keyword = st.text_input(
         "🔎 Cari Nama Material (Ketik Kata Kunci):",
         placeholder="Ketik misal: BOLT, ISOLATOR, ARM, CABLE...",
     )
 
-    # Filter daftar material berdasarkan kata kunci pencarian
     if search_keyword.strip():
         list_mat_display = [
             m for m in list_mat_all if search_keyword.upper() in m.upper()
         ]
         if not list_mat_display:
             st.warning(
-                f"⚠️ Tidak ditemukan material dengan kata kunci '{search_keyword}' pada {type_selected}."
+                f"⚠️ Tidak ditemukan material dengan kata kunci '{search_keyword}'."
             )
             list_mat_display = list_mat_all
     else:
@@ -126,7 +120,6 @@ with col_f2:
 
 st.markdown("---")
 
-# Step 4: Input Volume Material (Reset Otomatis ke 0 saat Tambah)
 col_v1, col_v2, col_v3, col_v4 = st.columns([1, 1, 1, 1.2])
 
 with col_v1:
@@ -143,7 +136,6 @@ with col_v3:
     )
 
 
-# Fungsi Callback untuk Menambah Item & Reset Volume ke 0
 def tambah_ke_keranjang():
     if (
         st.session_state.v_mat == 0
@@ -163,7 +155,6 @@ def tambah_ke_keranjang():
     }
     st.session_state.keranjang.append(item_baru)
 
-    # Reset nilai volume otomatis kembali ke 0
     st.session_state.v_mat = 0
     st.session_state.v_pasang = 0
     st.session_state.v_bongkar = 0
@@ -263,10 +254,64 @@ with col_act1:
         st.session_state.keranjang = []
         st.rerun()
 
+# ==========================================
+# 6. SUBMIT NYATA KE GOOGLE SHEETS
+# ==========================================
 with col_act2:
     if st.button(
         "🚀 SUBMIT DATA KE GOOGLE SHEETS",
         type="primary",
         use_container_width=True,
     ):
-        st.success("Data berhasil disubmit!")
+        if not st.session_state.keranjang:
+            st.error("❌ Keranjang masih kosong! Tambahkan material terlebih dahulu.")
+        elif not nama_pekerjaan:
+            st.error("❌ Harap isi NAMA PEKERJAAN pada Header!")
+        else:
+            try:
+                # Membuat koneksi ke GSheets Connection Streamlit
+                conn = st.connection("gsheets", type=GSheetsConnection)
+
+                # Ambil data eksisting dari GSheet
+                existing_data = conn.read(ttl=0)
+
+                # Siapkan Data Baru untuk Digabungkan
+                records_baru = []
+                for item in df_hasil.to_dict("records"):
+                    records_baru.append({
+                        "NAMA PEKERJAAN": nama_pekerjaan,
+                        "ALAMAT PEKERJAAN": alamat_pekerjaan,
+                        "JENIS PEKERJAAN": jenis_pekerjaan,
+                        "TANGGAL": str(tanggal),
+                        "JENIS KONSTRUKSI": item["Jenis Konstruksi"],
+                        "TYPE KONSTRUKSI": item["Type Konstruksi"],
+                        "NAMA MATERIAL": item["Material"],
+                        "VOL MATERIAL": item["Volume Material"],
+                        "VOL PASANG": item["Volume Pasang"],
+                        "VOL BONGKAR": item["Volume Bongkar"],
+                        "HARGA MATERIAL": item["Harga Material Satuan"],
+                        "BIAYA MATERIAL": item["Biaya Material"],
+                        "BIAYA PASANG": item["Biaya Pasang"],
+                        "TOTAL ESTIMASI": total_biaya,
+                    })
+
+                df_baru = pd.DataFrame(records_baru)
+
+                # Tumpuk data baru di bawah data lama
+                if existing_data is not None and not existing_data.empty:
+                    df_final = pd.concat(
+                        [existing_data, df_baru], ignore_index=True
+                    )
+                else:
+                    df_final = df_baru
+
+                # Update ke Google Sheet
+                conn.update(data=df_final)
+
+                st.success("🎉 Data BERHASIL dikirim dan tersimpan di Google Sheet!")
+                st.session_state.keranjang = []  # Kosongkan keranjang
+            except Exception as e:
+                st.error(f"⚠️ Gagal menyimpan ke Google Sheets: {e}")
+                st.info(
+                    "Pastikan Secrets Google Sheets di Streamlit Cloud sudah dikonfigurasi."
+                )
