@@ -27,7 +27,6 @@ if "keranjang_material" not in st.session_state:
 def clean_string(val):
     if pd.isna(val):
         return ""
-    # Normalisasi spasi ganda/berlebih menjadi 1 spasi tunggal
     return re.sub(r'\s+', ' ', str(val)).strip()
 
 # MENGAMBIL MASTER DATA MATERIAL DARI EXCEL LOKAL REPO
@@ -138,8 +137,18 @@ if tambah_btn:
         if volume_material == 0 and volume_pasang == 0 and volume_bongkar == 0:
             st.warning("Minimal salah satu volume (Material / Pasang / Bongkar) harus diisi > 0!")
         else:
-            row_match = df_final_mat[df_final_mat["NAMA_MATERIAL"] == selected_material]
+            # PENCARIAN LANGSUNG KE MASTER DATA (TIDAK BERGANTUNG FILTER FORM)
+            row_match = df_master[
+                (df_master["JENIS_KONSTRUKSI"] == selected_jenis_konstruksi) & 
+                (df_master["NAMA_MATERIAL"] == selected_material)
+            ]
             
+            # Jika difilter per type, sesuaikan spesifik ke type-nya
+            if selected_type_konstruksi and selected_type_konstruksi != "-- Semua Type --":
+                row_match_type = row_match[row_match["TYPE_KONSTRUKSI"] == selected_type_konstruksi]
+                if not row_match_type.empty:
+                    row_match = row_match_type
+
             if not row_match.empty:
                 type_konstruksi_val = row_match["TYPE_KONSTRUKSI"].values[0]
                 harga_mat = float(row_match["HARGA_MATERIAL"].values[0])
@@ -151,15 +160,15 @@ if tambah_btn:
                 harga_mat, harga_pasang, harga_bongkar = 0.0, 0.0, 0.0
                 harga_mat_raw = "0"
 
-            # Hitung biaya perkalian (Jika PLN -> harga_mat = 0, sehingga total_biaya_mat = 0)
+            # Hitung biaya perkalian
             total_biaya_mat = volume_material * harga_mat
             total_biaya_pasang = volume_pasang * harga_pasang
             total_biaya_bongkar = volume_bongkar * harga_bongkar
             
-            # Estimasi Harga = Jumlah Total Biaya Material + Pasang + Bongkar
+            # Estimasi Harga = Total Material + Pasang + Bongkar
             estimasi_harga = total_biaya_mat + total_biaya_pasang + total_biaya_bongkar
 
-            # Format label harga satuan (aman dari error tipe data)
+            # Format label harga satuan
             harga_satuan_label = "PLN" if "PLN" in harga_mat_raw.upper() else f"Rp {harga_mat:,.0f}"
 
             st.session_state.keranjang_material.append({
