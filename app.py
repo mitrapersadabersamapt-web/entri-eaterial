@@ -180,23 +180,21 @@ def hitung_keranjang(list_keranjang, df_master):
         how="left",
     )
 
-    # Ambil harga satuan dari master
     df_cart["Harga Material Satuan"] = merged["HARGA MATERIAL"].fillna(0.0)
     df_cart["Jasa Pasang Satuan"] = merged["JASA PASANG"].fillna(0.0)
     df_cart["Jasa Bongkar Satuan"] = merged["JASA BONGKAR"].fillna(0.0)
 
-    # Hitung Jasa Pasang = Jasa Pasang Satuan x Volume Pasang
+    # 1. Biaya Pasang
     df_cart["Biaya Pasang"] = (
         df_cart["Volume Pasang"] * df_cart["Jasa Pasang Satuan"]
     )
 
-    # Hitung Jasa Bongkar = Jasa Bongkar Satuan x Volume Bongkar
+    # 2. Biaya Bongkar
     df_cart["Biaya Bongkar"] = (
         df_cart["Volume Bongkar"] * df_cart["Jasa Bongkar Satuan"]
     )
 
-    # Hitung Harga Material = Harga Material Satuan x Volume Material
-    # ATURAN KHUSUS: Jika nama material mengandung kata "PLN", hasilnya 0
+    # 3. Harga Material (Jika nama material mengandung "PLN" = 0)
     def hitung_biaya_material(row):
         nama_mat = str(row["Material"]).upper()
         if "PLN" in nama_mat:
@@ -205,7 +203,7 @@ def hitung_keranjang(list_keranjang, df_master):
 
     df_cart["Harga Material"] = df_cart.apply(hitung_biaya_material, axis=1)
 
-    # Total Estimasi Pekerjaan per baris
+    # Subtotal per baris
     df_cart["Total Subtotal"] = (
         df_cart["Harga Material"]
         + df_cart["Biaya Pasang"]
@@ -220,7 +218,6 @@ def hitung_keranjang(list_keranjang, df_master):
 df_hasil, total_biaya = hitung_keranjang(st.session_state.keranjang, df_master)
 
 if not df_hasil.empty:
-    # Menyiapkan DataFrame khusus tampilan
     df_display = df_hasil[[
         "Jenis Konstruksi",
         "Type Konstruksi",
@@ -233,7 +230,6 @@ if not df_hasil.empty:
         "Biaya Bongkar",
     ]].copy()
 
-    # Format angka ke Rupiah
     df_display["Harga Material"] = df_display["Harga Material"].apply(
         lambda x: f"Rp {x:,.0f}"
     )
@@ -285,10 +281,10 @@ with col_act2:
                         "VOL MATERIAL": item["Volume Material"],
                         "VOL PASANG": item["Volume Pasang"],
                         "VOL BONGKAR": item["Volume Bongkar"],
-                        "HARGA MATERIAL": item["Harga Material"],
-                        "BIAYA PASANG": item["Biaya Pasang"],
-                        "BIAYA BONGKAR": item["Biaya Bongkar"],
-                        "TOTAL ESTIMASI": total_biaya,
+                        "HARGA MATERIAL": f"Rp {item['Harga Material']:,.0f}",
+                        "BIAYA PASANG": f"Rp {item['Biaya Pasang']:,.0f}",
+                        "BIAYA BONGKAR": f"Rp {item['Biaya Bongkar']:,.0f}",
+                        "TOTAL ESTIMASI": f"Rp {total_biaya:,.2f}",
                     })
 
                 response = requests.post(WEBHOOK_URL, json=payload, timeout=15)
