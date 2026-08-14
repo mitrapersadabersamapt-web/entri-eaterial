@@ -37,14 +37,13 @@ def load_master_data():
         df_selected["NAMA_MATERIAL"] = df_mat.iloc[:, 2].astype(str).str.strip()
         df_selected["TYPE_KONSTRUKSI"] = df_mat.iloc[:, 3].astype(str).str.strip()
         
-        # Mengambil kolom HARGA MATERIAL (Kolom Index 4), JASA PASANG (Kolom Index 5), JASA BONGKAR (Kolom Index 6)
-        # Jika nilai berisi 'PLN' atau teks non-angka, pd.to_numeric dengan errors='coerce' akan mengubahnya menjadi NaN, lalu fillna(0) mengubahnya menjadi 0 (NOL)
+        # Mengambil HARGA MATERIAL (Index 4), JASA PASANG (Index 5), JASA BONGKAR (Index 6)
         df_selected["HARGA_MATERIAL"] = pd.to_numeric(df_mat.iloc[:, 4], errors='coerce').fillna(0.0)
         df_selected["JASA_PASANG"] = pd.to_numeric(df_mat.iloc[:, 5], errors='coerce').fillna(0.0)
         df_selected["JASA_BONGKAR"] = pd.to_numeric(df_mat.iloc[:, 6], errors='coerce').fillna(0.0)
 
         # Simpan nilai string mentah untuk keperluan tampilan label (misal: memunculkan tulisan "PLN")
-        df_selected["HARGA_MATERIAL_RAW"] = df_mat.iloc[:, 4].astype(str).str.strip()
+        df_selected["HARGA_MATERIAL_RAW"] = df_mat.iloc[:, 4].fillna("0").astype(str).str.strip()
 
         df_selected = df_selected.dropna(subset=["NAMA_MATERIAL"])
         return df_selected
@@ -139,7 +138,7 @@ if tambah_btn:
                 harga_mat = float(row_match["HARGA_MATERIAL"].values[0])
                 harga_pasang = float(row_match["JASA_PASANG"].values[0])
                 harga_bongkar = float(row_match["JASA_BONGKAR"].values[0])
-                harga_mat_raw = row_match["HARGA_MATERIAL_RAW"].values[0]
+                harga_mat_raw = str(row_match["HARGA_MATERIAL_RAW"].values[0])
             else:
                 type_konstruksi_val = selected_type_konstruksi if selected_type_konstruksi != "-- Semua Type --" else "-"
                 harga_mat, harga_pasang, harga_bongkar = 0.0, 0.0, 0.0
@@ -153,6 +152,9 @@ if tambah_btn:
             # Estimasi Harga = Jumlah Total Biaya Material + Pasang + Bongkar
             estimasi_harga = total_biaya_mat + total_biaya_pasang + total_biaya_bongkar
 
+            # Format label harga satuan (aman dari error tipe data)
+            harga_satuan_label = "PLN" if "PLN" in harga_mat_raw.upper() else f"Rp {harga_mat:,.0f}"
+
             st.session_state.keranjang_material.append({
                 "Jenis Konstruksi": selected_jenis_konstruksi,
                 "Type Konstruksi": type_konstruksi_val,
@@ -160,7 +162,7 @@ if tambah_btn:
                 "Volume Material": volume_material,
                 "Volume Pasang": volume_pasang,
                 "Volume Bongkar": volume_bongkar,
-                "Harga Material Satuan": "PLN" if "PLN" in harga_mat_raw.upper() else f"Rp {harga_mat:,.0f}",
+                "Harga Material Satuan": harga_satuan_label,
                 "Biaya Material": total_biaya_mat,
                 "Biaya Pasang": total_biaya_pasang,
                 "Biaya Bongkar": total_biaya_bongkar,
