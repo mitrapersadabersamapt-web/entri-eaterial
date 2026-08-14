@@ -1,13 +1,14 @@
+import json
 import pandas as pd
+import requests
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
 
 st.set_page_config(page_title="Sistem Entri Material PLN", layout="wide")
 
 # ==========================================
-# LINK GOOGLE SHEETS ANDA
+# URL GOOGLE APPS SCRIPT WEBHOOK ANDA
 # ==========================================
-SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1DUnC28hWJPXVKAamJSHv2t3LR2wdVCq-jegYJKIPAQY/edit"
+WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbyyDW104My3hp0fnW-KLQOWyIkVBSZ4iQu1wXA9fH6Kw8P942IF1f5Hi-Tjf5lTYL-U/exec"
 
 
 # ==========================================
@@ -270,21 +271,10 @@ with col_act2:
             st.error("❌ Harap isi NAMA PEKERJAAN pada Header!")
         else:
             try:
-                # Membuat koneksi ke GSheets
-                conn = st.connection("gsheets", type=GSheetsConnection)
-
-                # Ambil data eksisting langsung menentukan URL Spreadsheet
-                try:
-                    existing_data = conn.read(
-                        spreadsheet=SPREADSHEET_URL, ttl=0
-                    )
-                except Exception:
-                    existing_data = pd.DataFrame()
-
-                # Siapkan Data Baru
-                records_baru = []
+                # Menyiapkan payload JSON
+                payload = []
                 for item in df_hasil.to_dict("records"):
-                    records_baru.append({
+                    payload.append({
                         "NAMA PEKERJAAN": nama_pekerjaan,
                         "ALAMAT PEKERJAAN": alamat_pekerjaan,
                         "JENIS PEKERJAAN": jenis_pekerjaan,
@@ -301,21 +291,14 @@ with col_act2:
                         "TOTAL ESTIMASI": total_biaya,
                     })
 
-                df_baru = pd.DataFrame(records_baru)
+                # Kirim data HTTP POST ke Google Apps Script Webhook
+                response = requests.post(WEBHOOK_URL, json=payload, timeout=15)
 
-                # Gabungkan dengan data lama jika ada
-                if existing_data is not None and not existing_data.empty:
-                    df_final = pd.concat(
-                        [existing_data, df_baru], ignore_index=True
-                    )
+                if response.status_code == 200:
+                    st.success("🎉 Data BERHASIL dikirim dan tersimpan di Google Sheet!")
+                    st.session_state.keranjang = []  # Kosongkan keranjang
+                    st.rerun()
                 else:
-                    df_final = df_baru
-
-                # Kirim data ke Google Sheets
-                conn.update(spreadsheet=SPREADSHEET_URL, data=df_final)
-
-                st.success("🎉 Data BERHASIL dikirim dan tersimpan di Google Sheet!")
-                st.session_state.keranjang = []  # Kosongkan keranjang
-                st.rerun()
+                    st.error(f"⚠️ Gagal mengirim data. Status Code: {response.status_code}")
             except Exception as e:
-                st.error(f"⚠️ Gagal menyimpan ke Google Sheets: {e}")
+                st.error(f"⚠️ Terjadi kesalahan saat mengirim data: {e}")
