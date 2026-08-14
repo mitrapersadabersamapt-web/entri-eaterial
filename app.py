@@ -2,9 +2,12 @@ import pandas as pd
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 
-st.set_page_config(
-    page_title="Sistem Entri Material PLN", layout="wide"
-)
+st.set_page_config(page_title="Sistem Entri Material PLN", layout="wide")
+
+# ==========================================
+# LINK GOOGLE SHEETS ANDA
+# ==========================================
+SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1DUnC28hWJPXVKAamJSHv2t3LR2wdVCq-jegYJKIPAQY/edit"
 
 
 # ==========================================
@@ -81,9 +84,7 @@ st.subheader("2. Form Input Material Pekerjaan")
 list_jenis = sorted(df_master["JENIS KONSTRUKSI"].unique().tolist())
 jenis_selected = st.selectbox("1. Pilih Jenis Konstruksi:", list_jenis)
 
-df_filtered_jenis = df_master[
-    df_master["JENIS KONSTRUKSI"] == jenis_selected
-]
+df_filtered_jenis = df_master[df_master["JENIS KONSTRUKSI"] == jenis_selected]
 
 col_f1, col_f2 = st.columns(2)
 
@@ -255,7 +256,7 @@ with col_act1:
         st.rerun()
 
 # ==========================================
-# 6. SUBMIT NYATA KE GOOGLE SHEETS
+# 6. SUBMIT DATA KE GOOGLE SHEETS
 # ==========================================
 with col_act2:
     if st.button(
@@ -269,13 +270,18 @@ with col_act2:
             st.error("❌ Harap isi NAMA PEKERJAAN pada Header!")
         else:
             try:
-                # Membuat koneksi ke GSheets Connection Streamlit
+                # Membuat koneksi ke GSheets
                 conn = st.connection("gsheets", type=GSheetsConnection)
 
-                # Ambil data eksisting dari GSheet
-                existing_data = conn.read(ttl=0)
+                # Ambil data eksisting langsung menentukan URL Spreadsheet
+                try:
+                    existing_data = conn.read(
+                        spreadsheet=SPREADSHEET_URL, ttl=0
+                    )
+                except Exception:
+                    existing_data = pd.DataFrame()
 
-                # Siapkan Data Baru untuk Digabungkan
+                # Siapkan Data Baru
                 records_baru = []
                 for item in df_hasil.to_dict("records"):
                     records_baru.append({
@@ -297,7 +303,7 @@ with col_act2:
 
                 df_baru = pd.DataFrame(records_baru)
 
-                # Tumpuk data baru di bawah data lama
+                # Gabungkan dengan data lama jika ada
                 if existing_data is not None and not existing_data.empty:
                     df_final = pd.concat(
                         [existing_data, df_baru], ignore_index=True
@@ -305,13 +311,11 @@ with col_act2:
                 else:
                     df_final = df_baru
 
-                # Update ke Google Sheet
-                conn.update(data=df_final)
+                # Kirim data ke Google Sheets
+                conn.update(spreadsheet=SPREADSHEET_URL, data=df_final)
 
                 st.success("🎉 Data BERHASIL dikirim dan tersimpan di Google Sheet!")
                 st.session_state.keranjang = []  # Kosongkan keranjang
+                st.rerun()
             except Exception as e:
                 st.error(f"⚠️ Gagal menyimpan ke Google Sheets: {e}")
-                st.info(
-                    "Pastikan Secrets Google Sheets di Streamlit Cloud sudah dikonfigurasi."
-                )
