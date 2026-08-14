@@ -11,16 +11,13 @@ st.set_page_config(
 # ==========================================
 @st.cache_data
 def load_and_clean_master(filepath):
-    # Membaca data tabel mulai dari baris header (index 5)
     df = pd.read_excel(filepath, sheet_name="HEADER APLIKASI", header=5)
 
-    # 1. Trim spasi berlebih pada nama material dan tipe
     string_cols = ["JENIS KONSTRUKSI", "TYPE KONSTRUKSI", "NAMA MATERIAL"]
     for col in string_cols:
         if col in df.columns:
             df[col] = df[col].astype(str).str.strip()
 
-    # 2. Konversi kolom Harga & Jasa menjadi Angka (Teks 'PLN' otomatis jadi 0)
     numeric_cols = ["HARGA MATERIAL", "JASA PASANG", "JASA BONGKAR"]
     for col in numeric_cols:
         if col in df.columns:
@@ -29,7 +26,6 @@ def load_and_clean_master(filepath):
     return df
 
 
-# Membaca Master Data
 try:
     df_master = load_and_clean_master("MATERIAL 1.xlsx")
 except Exception:
@@ -39,13 +35,21 @@ except Exception:
         df_master = load_and_clean_master("MATERIAL 1_3.xlsx")
 
 # ==========================================
-# 2. SESSION STATE KERANJANG
+# 2. SESSION STATE MANAGEMENT
 # ==========================================
 if "keranjang" not in st.session_state:
     st.session_state.keranjang = []
 
+# Inisialisasi state untuk reset volume otomatis
+if "v_mat" not in st.session_state:
+    st.session_state.v_mat = 0
+if "v_pasang" not in st.session_state:
+    st.session_state.v_pasang = 0
+if "v_bongkar" not in st.session_state:
+    st.session_state.v_bongkar = 0
+
 # ==========================================
-# 3. BAGIAN 1: HEADER PEKERJAAN (SESUAI EXCEL MASTER)
+# 3. BAGIAN 1: HEADER PEKERJAAN
 # ==========================================
 st.title("⚡ Sistem Entri Material PLN")
 st.subheader("1. Header Data Pekerjaan")
@@ -70,60 +74,121 @@ with col_h2:
 st.markdown("---")
 
 # ==========================================
-# 4. BAGIAN 2: FORM INPUT MATERIAL
+# 4. BAGIAN 2: FORM INPUT MATERIAL & PENCARIAN
 # ==========================================
 st.subheader("2. Form Input Material Pekerjaan")
 
-# Pilihan Dropdown Dinamis dari Database
+# 1. Pilih Jenis Konstruksi
 list_jenis = sorted(df_master["JENIS KONSTRUKSI"].unique().tolist())
+jenis_selected = st.selectbox("Jenis Konstruksi", list_jenis)
 
-col_f1, col_f2, col_f3 = st.columns(3)
+df_filtered_jenis = df_master[
+    df_master["JENIS KONSTRUKSI"] == jenis_selected
+]
+
+col_f1, col_f2 = st.columns(2)
 
 with col_f1:
-    jenis_selected = st.selectbox("Jenis Konstruksi", list_jenis)
+    # Pencarian Type Konstruksi
+    search_type = st.text_input(
+        "🔍 Cari Type Konstruksi (Ketik kata kunci):", value=""
+    )
+    list_type_all = sorted(
+        df_filtered_jenis["TYPE KONSTRUKSI"].unique().tolist()
+    )
 
-df_filtered_type = df_master[df_master["JENIS KONSTRUKSI"] == jenis_selected]
-list_type = sorted(df_filtered_type["TYPE KONSTRUKSI"].unique().tolist())
+    if search_type.strip():
+        list_type_filtered = [
+            t for t in list_type_all if search_type.upper() in t.upper()
+        ]
+        if not list_type_filtered:
+            st.warning("Type Konstruksi tidak ditemukan.")
+            list_type_filtered = list_type_all
+    else:
+        list_type_filtered = list_type_all
+
+    type_selected = st.selectbox("Pilih Type Konstruksi", list_type_filtered)
+
+df_filtered_type = df_filtered_jenis[
+    df_filtered_jenis["TYPE KONSTRUKSI"] == type_selected
+]
 
 with col_f2:
-    type_selected = st.selectbox("Type Konstruksi", list_type)
+    # Pencarian Nama Material
+    search_mat = st.text_input(
+        "🔍 Cari Nama Material (Ketik kata kunci):", value=""
+    )
+    list_mat_all = sorted(
+        df_filtered_type["NAMA MATERIAL"].unique().tolist()
+    )
 
-df_filtered_mat = df_filtered_type[
-    df_filtered_type["TYPE KONSTRUKSI"] == type_selected
-]
-list_material = sorted(df_filtered_mat["NAMA MATERIAL"].unique().tolist())
+    if search_mat.strip():
+        list_mat_filtered = [
+            m for m in list_mat_all if search_mat.upper() in m.upper()
+        ]
+        if not list_mat_filtered:
+            st.warning("Nama Material tidak ditemukan.")
+            list_mat_filtered = list_mat_all
+    else:
+        list_mat_filtered = list_mat_all
 
-with col_f3:
-    material_selected = st.selectbox("Nama Material", list_material)
+    material_selected = st.selectbox("Pilih Nama Material", list_mat_filtered)
 
-# Input Volume dan Tombol Tambah
+st.markdown("---")
+
+# Input Volume (Menggunakan Session State agar dapat di-reset ke 0)
 col_v1, col_v2, col_v3, col_v4 = st.columns([1, 1, 1, 1.2])
 
 with col_v1:
-    vol_mat = st.number_input("Volume Material", min_value=0, value=1, step=1)
+    vol_mat = st.number_input(
+        "Volume Material", min_value=0, key="v_mat", step=1
+    )
 with col_v2:
-    vol_pasang = st.number_input("Volume Pasang", min_value=0, value=1, step=1)
+    vol_pasang = st.number_input(
+        "Volume Pasang", min_value=0, key="v_pasang", step=1
+    )
 with col_v3:
     vol_bongkar = st.number_input(
-        "Volume Bongkar", min_value=0, value=0, step=1
+        "Volume Bongkar", min_value=0, key="v_bongkar", step=1
     )
+
+
+# Fungsi Callback saat Klik Tambah Material
+def tambah_ke_keranjang():
+    if (
+        st.session_state.v_mat == 0
+        and st.session_state.v_pasang == 0
+        and st.session_state.v_bongkar == 0
+    ):
+        st.toast("⚠️ Harap isi volume terlebih dahulu sebelum menambahkan!")
+        return
+
+    item_baru = {
+        "Jenis Konstruksi": jenis_selected,
+        "Type Konstruksi": type_selected,
+        "Material": material_selected,
+        "Volume Material": st.session_state.v_mat,
+        "Volume Pasang": st.session_state.v_pasang,
+        "Volume Bongkar": st.session_state.v_bongkar,
+    }
+    st.session_state.keranjang.append(item_baru)
+
+    # RESET OTOMATIS VALUE VOLUME MENJADI 0
+    st.session_state.v_mat = 0
+    st.session_state.v_pasang = 0
+    st.session_state.v_bongkar = 0
+
+    st.toast("✅ Item berhasil ditambahkan ke keranjang!")
+
 
 with col_v4:
     st.write(" ")
     st.write(" ")
-    btn_tambah = st.button("➕ Tambah ke Keranjang", use_container_width=True)
-
-# Tambah Item ke Keranjang
-if btn_tambah:
-    st.session_state.keranjang.append({
-        "Jenis Konstruksi": jenis_selected,
-        "Type Konstruksi": type_selected,
-        "Material": material_selected,
-        "Volume Material": vol_mat,
-        "Volume Pasang": vol_pasang,
-        "Volume Bongkar": vol_bongkar,
-    })
-    st.success("Item berhasil ditambahkan!")
+    st.button(
+        "➕ Tambah ke Keranjang",
+        use_container_width=True,
+        on_click=tambah_ke_keranjang,
+    )
 
 st.markdown("---")
 
@@ -139,7 +204,6 @@ def hitung_keranjang(list_keranjang, df_master):
 
     df_cart = pd.DataFrame(list_keranjang)
 
-    # Lookup Harga dari Master Database
     merged = pd.merge(
         df_cart,
         df_master,
@@ -152,7 +216,6 @@ def hitung_keranjang(list_keranjang, df_master):
     df_cart["Harga Pasang Satuan"] = merged["JASA PASANG"].fillna(0.0)
     df_cart["Harga Bongkar Satuan"] = merged["JASA BONGKAR"].fillna(0.0)
 
-    # Perhitungan Total per Item
     df_cart["Biaya Material"] = (
         df_cart["Volume Material"] * df_cart["Harga Material Satuan"]
     )
@@ -172,10 +235,8 @@ def hitung_keranjang(list_keranjang, df_master):
     return df_cart, total_estimasi
 
 
-# Proses Kalkulasi Keranjang
 df_hasil, total_biaya = hitung_keranjang(st.session_state.keranjang, df_master)
 
-# Tampilkan Tabel Keranjang
 if not df_hasil.empty:
     df_display = df_hasil[[
         "Jenis Konstruksi",
@@ -189,7 +250,6 @@ if not df_hasil.empty:
         "Biaya Pasang",
     ]].copy()
 
-    # Format Tampilan Mata Uang Rp
     df_display["Harga Material Satuan"] = df_display[
         "Harga Material Satuan"
     ].apply(lambda x: f"Rp {x:,.0f}")
@@ -204,11 +264,9 @@ if not df_hasil.empty:
 else:
     st.info("Keranjang kosong. Silakan isi form di atas untuk memasukkan data.")
 
-# Display Total Estimasi Harga
 st.markdown("##### 💰 TOTAL ESTIMASI HARGA PEKERJAAN")
 st.markdown(f"# Rp {total_biaya:,.2f}")
 
-# Tombol Aksi Keranjang
 col_act1, col_act2 = st.columns([1, 2])
 with col_act1:
     if st.button("🗑️ Kosongkan Keranjang", use_container_width=True):
