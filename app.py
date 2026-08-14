@@ -119,11 +119,13 @@ if tambah_btn:
         if volume_material == 0 and volume_pasang == 0 and volume_bongkar == 0:
             st.warning("Minimal salah satu volume (Material / Pasang / Bongkar) harus diisi > 0!")
         else:
-            row_match = df_master[
-                (df_master["JENIS_KONSTRUKSI"] == selected_jenis_konstruksi) & 
-                (df_master["NAMA_MATERIAL"] == selected_material)
-            ]
-            type_konstruksi_val = row_match["TYPE_KONSTRUKSI"].values[0] if not row_match.empty else "-"
+            # PERBAIKAN: Cari Type Konstruksi langsung dari daftar df_final_mat yang sudah difilter
+            row_match = df_final_mat[df_final_mat["NAMA_MATERIAL"] == selected_material]
+            
+            if not row_match.empty:
+                type_konstruksi_val = row_match["TYPE_KONSTRUKSI"].values[0]
+            else:
+                type_konstruksi_val = selected_type_konstruksi if selected_type_konstruksi != "-- Semua Type --" else "-"
 
             st.session_state.keranjang_material.append({
                 "Jenis Konstruksi": selected_jenis_konstruksi,
@@ -133,7 +135,7 @@ if tambah_btn:
                 "Volume Pasang": volume_pasang,
                 "Volume Bongkar": volume_bongkar
             })
-            st.success(f"'{selected_material}' berhasil ditambahkan ke keranjang!")
+            st.success(f"'{selected_material}' ({type_konstruksi_val}) berhasil ditambahkan ke keranjang!")
             st.rerun()
 
 st.divider()
