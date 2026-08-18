@@ -3,7 +3,113 @@ import pandas as pd
 import requests
 import streamlit as st
 
-st.set_page_config(page_title="Sistem Entri Material PLN", layout="wide")
+# Config Halaman
+st.set_page_config(
+    page_title="Sistem Entri Material PLN",
+    page_icon="⚡",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+# ==========================================
+# CUSTOM CSS UNTUK TAMPILAN CERAH & KONTRAS
+# ==========================================
+st.markdown(
+    """
+    <style>
+    /* Background Utama Bersih & Cerah */
+    .stApp {
+        background-color: #f4f7fa;
+    }
+    
+    /* Header Banner PLN */
+    .pln-header {
+        background: linear-gradient(135deg, #005691 0%, #0080ff 100%);
+        padding: 24px;
+        border-radius: 12px;
+        color: white;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        margin-bottom: 25px;
+    }
+    .pln-header h1 {
+        color: #FFFFFF !important;
+        font-weight: 800 !important;
+        margin: 0;
+        font-size: 32px;
+    }
+    .pln-header p {
+        color: #FFE600 !important;
+        margin: 4px 0 0 0;
+        font-weight: 600;
+    }
+
+    /* Card Container Seksi */
+    div[data-testid="stVerticalBlock"] > div.stCardBlock {
+        background-color: #ffffff;
+        padding: 20px;
+        border-radius: 10px;
+        border-left: 5px solid #0080ff;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        margin-bottom: 20px;
+    }
+
+    /* Label Input Lebih Jelas & Bold */
+    label, .stSelectbox label, .stTextInput label, .stNumberInput label {
+        color: #1e293b !important;
+        font-weight: 700 !important;
+        font-size: 14px !important;
+    }
+
+    /* Style Input Box (Border & BG) */
+    .stTextInput input, .stTextArea textarea, .stSelectbox > div > div, .stNumberInput input {
+        background-color: #ffffff !important;
+        border: 1px solid #cbd5e1 !important;
+        border-radius: 8px !important;
+        color: #0f172a !important;
+        font-weight: 500 !important;
+    }
+    .stTextInput input:focus, .stTextArea textarea:focus, .stSelectbox > div > div:focus {
+        border-color: #0080ff !important;
+        box-shadow: 0 0 0 2px rgba(0, 128, 255, 0.2) !important;
+    }
+
+    /* Subheader Styling */
+    .section-title {
+        color: #0f172a;
+        font-weight: 700;
+        font-size: 20px;
+        margin-bottom: 15px;
+        border-bottom: 2px solid #e2e8f0;
+        padding-bottom: 8px;
+    }
+
+    /* Card Total Estimasi */
+    .total-box {
+        background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+        border: 2px solid #f59e0b;
+        padding: 18px 24px;
+        border-radius: 12px;
+        text-align: left;
+        margin-top: 15px;
+        margin-bottom: 20px;
+    }
+    .total-title {
+        color: #b45309;
+        font-size: 14px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .total-amount {
+        color: #78350f;
+        font-size: 32px;
+        font-weight: 800;
+        margin-top: 4px;
+    }
+    </style>
+""",
+    unsafe_allow_html=True,
+)
 
 # ==========================================
 # URL GOOGLE APPS SCRIPT WEBHOOK ANDA
@@ -56,26 +162,37 @@ if "pesan_sukses" not in st.session_state:
     st.session_state.pesan_sukses = False
 
 # ==========================================
-# 3. BAGIAN 1: HEADER PEKERJAAN
+# BANNER HEADER TAMPILAN KONTRAST CERAH
 # ==========================================
-st.title("⚡ Sistem Entri Material PLN")
+st.markdown(
+    """
+    <div class="pln-header">
+        <h1>⚡ SISTEM ENTRI MATERIAL PLN</h1>
+        <p>Aplikasi Input Rekap Material & Estimasi Biaya Pekerjaan</p>
+    </div>
+""",
+    unsafe_allow_html=True,
+)
 
-# TAMPILKAN PESAN SUKSES DI ATAS JIKA BARU SAJA SUBMIT
+# TAMPILKAN PESAN SUKSES JIKA SUBMIT BERHASIL
 if st.session_state.pesan_sukses:
     st.success("🎉 **SELAMAT! DATA BERHASIL DIKIRIM KE GOOGLE SHEET**")
-    st.balloons()  # Efek balon perayaan
+    st.balloons()
     st.session_state.pesan_sukses = False
 
-st.subheader("1. Header Data Pekerjaan")
+# ==========================================
+# 3. BAGIAN 1: HEADER PEKERJAAN
+# ==========================================
+st.markdown('<div class="section-title">1. Header Data Pekerjaan</div>', unsafe_allow_html=True)
 
 col_h1, col_h2 = st.columns(2)
 
 with col_h1:
     nama_pekerjaan = st.text_input(
-        "NAMA PEKERJAAN :", placeholder="Masukkan Nama Pekerjaan..."
+        "NAMA PEKERJAAN :", placeholder="Masukkan Nama Pekerjaan (misal: PERUBAHAN DAYA)"
     )
     alamat_pekerjaan = st.text_area(
-        "ALAMAT PEKERJAAN :", placeholder="Masukkan Alamat Pekerjaan..."
+        "ALAMAT PEKERJAAN :", placeholder="Masukkan Alamat Lengkap Pekerjaan..."
     )
 
 with col_h2:
@@ -85,12 +202,12 @@ with col_h2:
     )
     tanggal = st.date_input("TANGGAL :")
 
-st.markdown("---")
+st.markdown("<br>", unsafe_allow_html=True)
 
 # ==========================================
 # 4. BAGIAN 2: FORM INPUT MATERIAL
 # ==========================================
-st.subheader("2. Form Input Material Pekerjaan")
+st.markdown('<div class="section-title">2. Form Input Material Pekerjaan</div>', unsafe_allow_html=True)
 
 list_jenis = sorted(df_master["JENIS KONSTRUKSI"].unique().tolist())
 jenis_selected = st.selectbox("1. Pilih Jenis Konstruksi:", list_jenis)
@@ -115,9 +232,7 @@ with col_f2:
         help="Ketik langsung kata kunci material pada kotak untuk mencari.",
     )
 
-st.markdown("---")
-
-col_v1, col_v2, col_v3, col_v4 = st.columns([1, 1, 1, 1.2])
+col_v1, col_v2, col_v3, col_v4 = st.columns([1, 1, 1, 1.3])
 
 with col_v1:
     vol_mat = st.number_input(
@@ -168,12 +283,12 @@ with col_v4:
         on_click=tambah_ke_keranjang,
     )
 
-st.markdown("---")
+st.markdown("<br>", unsafe_allow_html=True)
 
 # ==========================================
 # 5. BAGIAN 3: KERANJANG & LOGIKA PERHITUNGAN
 # ==========================================
-st.subheader("3. Keranjang Input Material")
+st.markdown('<div class="section-title">3. Keranjang Input Material</div>', unsafe_allow_html=True)
 
 
 def hitung_keranjang(list_keranjang, df_master):
@@ -194,17 +309,14 @@ def hitung_keranjang(list_keranjang, df_master):
     df_cart["Jasa Pasang Satuan"] = merged["JASA PASANG"].fillna(0.0)
     df_cart["Jasa Bongkar Satuan"] = merged["JASA BONGKAR"].fillna(0.0)
 
-    # 1. Biaya Pasang
+    # Biaya
     df_cart["Biaya Pasang"] = (
         df_cart["Volume Pasang"] * df_cart["Jasa Pasang Satuan"]
     )
-
-    # 2. Biaya Bongkar
     df_cart["Biaya Bongkar"] = (
         df_cart["Volume Bongkar"] * df_cart["Jasa Bongkar Satuan"]
     )
 
-    # 3. Harga Material
     def hitung_biaya_material(row):
         nama_mat = str(row["Material"]).upper()
         if "PLN" in nama_mat:
@@ -213,7 +325,6 @@ def hitung_keranjang(list_keranjang, df_master):
 
     df_cart["Harga Material"] = df_cart.apply(hitung_biaya_material, axis=1)
 
-    # Subtotal per baris
     df_cart["Total Subtotal"] = (
         df_cart["Harga Material"]
         + df_cart["Biaya Pasang"]
@@ -252,10 +363,18 @@ if not df_hasil.empty:
 
     st.dataframe(df_display, use_container_width=True)
 else:
-    st.info("Keranjang kosong. Silakan isi form di atas untuk memasukkan data.")
+    st.info("💡 Keranjang masih kosong. Silakan tambahkan material di atas.")
 
-st.markdown("##### 💰 TOTAL ESTIMASI HARGA PEKERJAAN")
-st.markdown(f"# Rp {total_biaya:,.2f}")
+# KARTU TOTAL ESTIMASI CERAH
+st.markdown(
+    f"""
+    <div class="total-box">
+        <div class="total-title">💰 TOTAL ESTIMASI HARGA PEKERJAAN</div>
+        <div class="total-amount">Rp {total_biaya:,.2f}</div>
+    </div>
+""",
+    unsafe_allow_html=True,
+)
 
 col_act1, col_act2 = st.columns([1, 2])
 with col_act1:
@@ -301,7 +420,6 @@ with col_act2:
                     response = requests.post(WEBHOOK_URL, json=payload, timeout=15)
 
                 if response.status_code == 200:
-                    # SIMPAN STATUS SUKSES & KOSONGKAN KERANJANG
                     st.session_state.pesan_sukses = True
                     st.session_state.keranjang = []
                     st.rerun()
