@@ -43,16 +43,6 @@ st.markdown(
         font-weight: 600;
     }
 
-    /* Card Container Seksi */
-    div[data-testid="stVerticalBlock"] > div.stCardBlock {
-        background-color: #ffffff;
-        padding: 20px;
-        border-radius: 10px;
-        border-left: 5px solid #0080ff;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-        margin-bottom: 20px;
-    }
-
     /* Label Input Lebih Jelas & Bold */
     label, .stSelectbox label, .stTextInput label, .stNumberInput label {
         color: #1e293b !important;
@@ -67,10 +57,6 @@ st.markdown(
         border-radius: 8px !important;
         color: #0f172a !important;
         font-weight: 500 !important;
-    }
-    .stTextInput input:focus, .stTextArea textarea:focus, .stSelectbox > div > div:focus {
-        border-color: #0080ff !important;
-        box-shadow: 0 0 0 2px rgba(0, 128, 255, 0.2) !important;
     }
 
     /* Subheader Styling */
@@ -151,19 +137,10 @@ except Exception:
 if "keranjang" not in st.session_state:
     st.session_state.keranjang = []
 
-if "v_mat" not in st.session_state:
-    st.session_state.v_mat = 0
-if "v_pasang" not in st.session_state:
-    st.session_state.v_pasang = 0
-if "v_bongkar" not in st.session_state:
-    st.session_state.v_bongkar = 0
-
 if "pesan_sukses" not in st.session_state:
     st.session_state.pesan_sukses = False
 
-# ==========================================
-# BANNER HEADER TAMPILAN KONTRAST CERAH
-# ==========================================
+# BANNER HEADER
 st.markdown(
     """
     <div class="pln-header">
@@ -174,7 +151,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# TAMPILKAN PESAN SUKSES JIKA SUBMIT BERHASIL
 if st.session_state.pesan_sukses:
     st.success("🎉 **SELAMAT! DATA BERHASIL DIKIRIM KE GOOGLE SHEET**")
     st.balloons()
@@ -235,43 +211,24 @@ with col_f2:
 col_v1, col_v2, col_v3, col_v4 = st.columns([1, 1, 1, 1.3])
 
 with col_v1:
-    vol_mat = st.number_input(
-        "Volume Material", min_value=0, key="v_mat", step=1
-    )
+    vol_mat_default = st.number_input("Volume Material", min_value=0, value=1, step=1)
 with col_v2:
-    vol_pasang = st.number_input(
-        "Volume Pasang", min_value=0, key="v_pasang", step=1
-    )
+    vol_pasang_default = st.number_input("Volume Pasang", min_value=0, value=1, step=1)
 with col_v3:
-    vol_bongkar = st.number_input(
-        "Volume Bongkar", min_value=0, key="v_bongkar", step=1
-    )
+    vol_bongkar_default = st.number_input("Volume Bongkar", min_value=0, value=0, step=1)
 
 
 def tambah_ke_keranjang():
-    if (
-        st.session_state.v_mat == 0
-        and st.session_state.v_pasang == 0
-        and st.session_state.v_bongkar == 0
-    ):
-        st.toast("⚠️ Harap isi volume terlebih dahulu!")
-        return
-
     item_baru = {
         "Jenis Konstruksi": jenis_selected,
         "Type Konstruksi": type_selected,
         "Material": material_selected,
-        "Volume Material": st.session_state.v_mat,
-        "Volume Pasang": st.session_state.v_pasang,
-        "Volume Bongkar": st.session_state.v_bongkar,
+        "Volume Material": int(vol_mat_default),
+        "Volume Pasang": int(vol_pasang_default),
+        "Volume Bongkar": int(vol_bongkar_default),
     }
     st.session_state.keranjang.append(item_baru)
-
-    st.session_state.v_mat = 0
-    st.session_state.v_pasang = 0
-    st.session_state.v_bongkar = 0
-
-    st.toast("✅ Item berhasil ditambahkan ke keranjang!")
+    st.toast("✅ Material berhasil masuk ke keranjang!")
 
 
 with col_v4:
@@ -286,36 +243,50 @@ with col_v4:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ==========================================
-# 5. BAGIAN 3: KERANJANG & LOGIKA PERHITUNGAN
+# 5. BAGIAN 3: KERANJANG EDITABLE & PERHITUNGAN
 # ==========================================
-st.markdown('<div class="section-title">3. Keranjang Input Material</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">3. Keranjang Input Material (Bisa Edit Volume Langsung)</div>', unsafe_allow_html=True)
 
+if st.session_state.keranjang:
+    df_cart_raw = pd.DataFrame(st.session_state.keranjang)
 
-def hitung_keranjang(list_keranjang, df_master):
-    if not list_keranjang:
-        return pd.DataFrame(), 0.0
+    st.caption("💡 **Petunjuk:** Anda bisa langsung mengubah angka pada kolom **Volume Material**, **Volume Pasang**, dan **Volume Bongkar** di bawah ini!")
 
-    df_cart = pd.DataFrame(list_keranjang)
+    # Menggunakan st.data_editor agar kolom Volume bisa diisi/edited langsung di tabel
+    edited_df = st.data_editor(
+        df_cart_raw,
+        column_config={
+            "Jenis Konstruksi": st.column_config.TextColumn(disabled=True),
+            "Type Konstruksi": st.column_config.TextColumn(disabled=True),
+            "Material": st.column_config.TextColumn(disabled=True),
+            "Volume Material": st.column_config.NumberColumn("Volume Material", min_value=0, step=1, required=True),
+            "Volume Pasang": st.column_config.NumberColumn("Volume Pasang", min_value=0, step=1, required=True),
+            "Volume Bongkar": st.column_config.NumberColumn("Volume Bongkar", min_value=0, step=1, required=True),
+        },
+        use_container_width=True,
+        hide_index=True,
+        key="editor_keranjang",
+    )
 
+    # Simpan perubahan kembali ke session state
+    st.session_state.keranjang = edited_df.to_dict("records")
+
+    # Hitung Otomatis
     merged = pd.merge(
-        df_cart,
+        edited_df,
         df_master,
         left_on=["Jenis Konstruksi", "Type Konstruksi", "Material"],
         right_on=["JENIS KONSTRUKSI", "TYPE KONSTRUKSI", "NAMA MATERIAL"],
         how="left",
     )
 
-    df_cart["Harga Material Satuan"] = merged["HARGA MATERIAL"].fillna(0.0)
-    df_cart["Jasa Pasang Satuan"] = merged["JASA PASANG"].fillna(0.0)
-    df_cart["Jasa Bongkar Satuan"] = merged["JASA BONGKAR"].fillna(0.0)
+    edited_df["Harga Material Satuan"] = merged["HARGA MATERIAL"].fillna(0.0)
+    edited_df["Jasa Pasang Satuan"] = merged["JASA PASANG"].fillna(0.0)
+    edited_df["Jasa Bongkar Satuan"] = merged["JASA BONGKAR"].fillna(0.0)
 
     # Biaya
-    df_cart["Biaya Pasang"] = (
-        df_cart["Volume Pasang"] * df_cart["Jasa Pasang Satuan"]
-    )
-    df_cart["Biaya Bongkar"] = (
-        df_cart["Volume Bongkar"] * df_cart["Jasa Bongkar Satuan"]
-    )
+    edited_df["Biaya Pasang"] = edited_df["Volume Pasang"] * edited_df["Jasa Pasang Satuan"]
+    edited_df["Biaya Bongkar"] = edited_df["Volume Bongkar"] * edited_df["Jasa Bongkar Satuan"]
 
     def hitung_biaya_material(row):
         nama_mat = str(row["Material"]).upper()
@@ -323,49 +294,18 @@ def hitung_keranjang(list_keranjang, df_master):
             return 0.0
         return row["Volume Material"] * row["Harga Material Satuan"]
 
-    df_cart["Harga Material"] = df_cart.apply(hitung_biaya_material, axis=1)
+    edited_df["Harga Material"] = edited_df.apply(hitung_biaya_material, axis=1)
+    edited_df["Total Subtotal"] = edited_df["Harga Material"] + edited_df["Biaya Pasang"] + edited_df["Biaya Bongkar"]
 
-    df_cart["Total Subtotal"] = (
-        df_cart["Harga Material"]
-        + df_cart["Biaya Pasang"]
-        + df_cart["Biaya Bongkar"]
-    )
+    total_biaya = edited_df["Total Subtotal"].sum()
+    df_hasil = edited_df
 
-    total_estimasi = df_cart["Total Subtotal"].sum()
-
-    return df_cart, total_estimasi
-
-
-df_hasil, total_biaya = hitung_keranjang(st.session_state.keranjang, df_master)
-
-if not df_hasil.empty:
-    df_display = df_hasil[[
-        "Jenis Konstruksi",
-        "Type Konstruksi",
-        "Material",
-        "Volume Material",
-        "Volume Pasang",
-        "Volume Bongkar",
-        "Harga Material",
-        "Biaya Pasang",
-        "Biaya Bongkar",
-    ]].copy()
-
-    df_display["Harga Material"] = df_display["Harga Material"].apply(
-        lambda x: f"Rp {x:,.0f}"
-    )
-    df_display["Biaya Pasang"] = df_display["Biaya Pasang"].apply(
-        lambda x: f"Rp {x:,.0f}"
-    )
-    df_display["Biaya Bongkar"] = df_display["Biaya Bongkar"].apply(
-        lambda x: f"Rp {x:,.0f}"
-    )
-
-    st.dataframe(df_display, use_container_width=True)
 else:
-    st.info("💡 Keranjang masih kosong. Silakan tambahkan material di atas.")
+    st.info("💡 Keranjang masih kosong. Silakan pilih material di atas lalu klik **➕ Tambah ke Keranjang**.")
+    total_biaya = 0.0
+    df_hasil = pd.DataFrame()
 
-# KARTU TOTAL ESTIMASI CERAH
+# KARTU TOTAL ESTIMASI HARGA
 st.markdown(
     f"""
     <div class="total-box">
