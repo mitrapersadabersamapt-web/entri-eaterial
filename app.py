@@ -243,61 +243,80 @@ with col_v4:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ==========================================
-# 5. BAGIAN 3: KERANJANG EDITABLE & PERHITUNGAN
+# 5. BAGIAN 3: KERANJANG WITH REAL-TIME PRICES
 # ==========================================
-st.markdown('<div class="section-title">3. Keranjang Input Material (Bisa Edit Volume Langsung)</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">3. Keranjang Input Material & Rincian Harga</div>', unsafe_allow_html=True)
 
 if st.session_state.keranjang:
     df_cart_raw = pd.DataFrame(st.session_state.keranjang)
 
-    st.caption("💡 **Petunjuk:** Anda bisa langsung mengubah angka pada kolom **Volume Material**, **Volume Pasang**, dan **Volume Bongkar** di bawah ini!")
-
-    # Menggunakan st.data_editor agar kolom Volume bisa diisi/edited langsung di tabel
-    edited_df = st.data_editor(
-        df_cart_raw,
-        column_config={
-            "Jenis Konstruksi": st.column_config.TextColumn(disabled=True),
-            "Type Konstruksi": st.column_config.TextColumn(disabled=True),
-            "Material": st.column_config.TextColumn(disabled=True),
-            "Volume Material": st.column_config.NumberColumn("Volume Material", min_value=0, step=1, required=True),
-            "Volume Pasang": st.column_config.NumberColumn("Volume Pasang", min_value=0, step=1, required=True),
-            "Volume Bongkar": st.column_config.NumberColumn("Volume Bongkar", min_value=0, step=1, required=True),
-        },
-        use_container_width=True,
-        hide_index=True,
-        key="editor_keranjang",
-    )
-
-    # Simpan perubahan kembali ke session state
-    st.session_state.keranjang = edited_df.to_dict("records")
-
-    # Hitung Otomatis
+    # 1. Hitung ulang Rincian Harga secara Real-Time berdasarkan Master Data
     merged = pd.merge(
-        edited_df,
+        df_cart_raw,
         df_master,
         left_on=["Jenis Konstruksi", "Type Konstruksi", "Material"],
         right_on=["JENIS KONSTRUKSI", "TYPE KONSTRUKSI", "NAMA MATERIAL"],
         how="left",
     )
 
-    edited_df["Harga Material Satuan"] = merged["HARGA MATERIAL"].fillna(0.0)
-    edited_df["Jasa Pasang Satuan"] = merged["JASA PASANG"].fillna(0.0)
-    edited_df["Jasa Bongkar Satuan"] = merged["JASA BONGKAR"].fillna(0.0)
+    df_cart_raw["Harga Satuan"] = merged["HARGA MATERIAL"].fillna(0.0)
+    df_cart_raw["Jasa Pasang Satuan"] = merged["JASA PASANG"].fillna(0.0)
+    df_cart_raw["Jasa Bongkar Satuan"] = merged["JASA BONGKAR"].fillna(0.0)
 
-    # Biaya
-    edited_df["Biaya Pasang"] = edited_df["Volume Pasang"] * edited_df["Jasa Pasang Satuan"]
-    edited_df["Biaya Bongkar"] = edited_df["Volume Bongkar"] * edited_df["Jasa Bongkar Satuan"]
+    # Biaya Pasang & Bongkar
+    df_cart_raw["Biaya Pasang"] = df_cart_raw["Volume Pasang"] * df_cart_raw["Jasa Pasang Satuan"]
+    df_cart_raw["Biaya Bongkar"] = df_cart_raw["Volume Bongkar"] * df_cart_raw["Jasa Bongkar Satuan"]
 
+    # Biaya Material (0 jika material bertuliskan PLN)
     def hitung_biaya_material(row):
         nama_mat = str(row["Material"]).upper()
         if "PLN" in nama_mat:
             return 0.0
-        return row["Volume Material"] * row["Harga Material Satuan"]
+        return row["Volume Material"] * row["Harga Satuan"]
 
-    edited_df["Harga Material"] = edited_df.apply(hitung_biaya_material, axis=1)
-    edited_df["Total Subtotal"] = edited_df["Harga Material"] + edited_df["Biaya Pasang"] + edited_df["Biaya Bongkar"]
+    df_cart_raw["Harga Material"] = df_cart_raw.apply(hitung_biaya_material, axis=1)
+    df_cart_raw["Subtotal"] = df_cart_raw["Harga Material"] + df_cart_raw["Biaya Pasang"] + df_cart_raw["Biaya Bongkar"]
 
-    total_biaya = edited_df["Total Subtotal"].sum()
+    st.caption("💡 **Petunjuk:** Ubah angka volume di bawah ini, nilai **Harga Material**, **Biaya Pasang**, **Biaya Bongkar**, dan **Subtotal** akan otomatis berubah.")
+
+    # 2. Tampilkan Tabel Interaktif dengan Rincian Harga
+    edited_df = st.data_editor(
+        df_cart_raw[[
+            "Jenis Konstruksi",
+            "Type Konstruksi",
+            "Material",
+            "Volume Material",
+            "Volume Pasang",
+            "Volume Bongkar",
+            "Harga Material",
+            "Biaya Pasang",
+            "Biaya Bongkar",
+            "Subtotal"
+        ]],
+        column_config={
+            "Jenis Konstruksi": st.column_config.TextColumn("Jenis Konstruksi", disabled=True),
+            "Type Konstruksi": st.column_config.TextColumn("Type Konstruksi", disabled=True),
+            "Material": st.column_config.TextColumn("Material", disabled=True),
+            "Volume Material": st.column_config.NumberColumn("Vol Material", min_value=0, step=1, required=True),
+            "Volume Pasang": st.column_config.NumberColumn("Vol Pasang", min_value=0, step=1, required=True),
+            "Volume Bongkar": st.column_config.NumberColumn("Vol Bongkar", min_value=0, step=1, required=True),
+            "Harga Material": st.column_config.NumberColumn("Harga Material", format="Rp %d", disabled=True),
+            "Biaya Pasang": st.column_config.NumberColumn("Biaya Pasang", format="Rp %d", disabled=True),
+            "Biaya Bongkar": st.column_config.NumberColumn("Biaya Bongkar", format="Rp %d", disabled=True),
+            "Subtotal": st.column_config.NumberColumn("Subtotal", format="Rp %d", disabled=True),
+        },
+        use_container_width=True,
+        hide_index=True,
+        key="editor_keranjang",
+    )
+
+    # Update state volume jika pengguna mengubah volume di tabel
+    st.session_state.keranjang = edited_df[[
+        "Jenis Konstruksi", "Type Konstruksi", "Material", 
+        "Volume Material", "Volume Pasang", "Volume Bongkar"
+    ]].to_dict("records")
+
+    total_biaya = edited_df["Subtotal"].sum()
     df_hasil = edited_df
 
 else:
