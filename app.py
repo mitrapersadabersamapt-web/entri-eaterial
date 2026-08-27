@@ -181,71 +181,72 @@ with col_h2:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ==========================================
-# 4. BAGIAN 2: FORM INPUT MATERIAL
+# 4. BAGIAN 2: PILIH KONSTRUKSI & CHECKBOX MATERIAL
 # ==========================================
-st.markdown('<div class="section-title">2. Form Input Material Pekerjaan</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">2. Pilih Material Per Konstruksi</div>', unsafe_allow_html=True)
 
-list_jenis = sorted(df_master["JENIS KONSTRUKSI"].unique().tolist())
-jenis_selected = st.selectbox("1. Pilih Jenis Konstruksi:", list_jenis)
+col_k1, col_k2 = st.columns(2)
+
+with col_k1:
+    list_jenis = sorted(df_master["JENIS KONSTRUKSI"].unique().tolist())
+    jenis_selected = st.selectbox("1. Pilih Jenis Konstruksi:", list_jenis)
 
 df_filtered_jenis = df_master[df_master["JENIS KONSTRUKSI"] == jenis_selected]
 
-col_f1, col_f2 = st.columns(2)
-
-with col_f1:
+with col_k2:
     list_type = sorted(df_filtered_jenis["TYPE KONSTRUKSI"].unique().tolist())
     type_selected = st.selectbox("2. Pilih Type Konstruksi:", list_type)
 
-df_filtered_type = df_filtered_jenis[
-    df_filtered_jenis["TYPE KONSTRUKSI"] == type_selected
-]
-list_mat_all = sorted(df_filtered_type["NAMA MATERIAL"].unique().tolist())
+df_filtered = df_filtered_jenis[df_filtered_jenis["TYPE KONSTRUKSI"] == type_selected].copy()
 
-with col_f2:
-    material_selected = st.selectbox(
-        "3. Pilih / Cari Nama Material:",
-        list_mat_all,
-        help="Ketik langsung kata kunci material pada kotak untuk mencari.",
-    )
+st.caption("☑️ **Tandai / Centang material yang akan dipakai di bawah ini, lalu klik tombol tambah ke keranjang:**")
 
-col_v1, col_v2, col_v3, col_v4 = st.columns([1, 1, 1, 1.3])
+# Siapkan data untuk Data Editor (Checkbox)
+df_filtered["Pilih"] = False
+df_pilihan_display = df_filtered[["Pilih", "NAMA MATERIAL"]].rename(columns={"NAMA MATERIAL": "Nama Material"})
 
-with col_v1:
-    vol_mat_default = st.number_input("Volume Material", min_value=0, value=1, step=1)
-with col_v2:
-    vol_pasang_default = st.number_input("Volume Pasang", min_value=0, value=1, step=1)
-with col_v3:
-    vol_bongkar_default = st.number_input("Volume Bongkar", min_value=0, value=0, step=1)
+# Tabel Checkbox Material
+selected_materials_editor = st.data_editor(
+    df_pilihan_display,
+    column_config={
+        "Pilih": st.column_config.CheckboxColumn("Pilih", default=False),
+        "Nama Material": st.column_config.TextColumn("Nama Material", disabled=True),
+    },
+    use_container_width=True,
+    hide_index=True,
+    key=f"editor_pilih_{jenis_selected}_{type_selected}"
+)
 
-
-def tambah_ke_keranjang():
-    item_baru = {
-        "Jenis Konstruksi": jenis_selected,
-        "Type Konstruksi": type_selected,
-        "Material": material_selected,
-        "Volume Material": int(vol_mat_default),
-        "Volume Pasang": int(vol_pasang_default),
-        "Volume Bongkar": int(vol_bongkar_default),
-    }
-    st.session_state.keranjang.append(item_baru)
-    st.toast("✅ Material berhasil masuk ke keranjang!")
-
-
-with col_v4:
-    st.write(" ")
-    st.write(" ")
-    st.button(
-        "➕ Tambah ke Keranjang",
-        use_container_width=True,
-        on_click=tambah_ke_keranjang,
-    )
+# Tombol Tambah yang Tercentang
+if st.button("➕ Masukkan Material Terpilih ke Keranjang", type="primary"):
+    mat_terpilih = selected_materials_editor[selected_materials_editor["Pilih"] == True]["Nama Material"].tolist()
+    
+    if not mat_terpilih:
+        st.warning("⚠️ Harap centang minimal satu material terlebih dahulu!")
+    else:
+        jumlah_ditambah = 0
+        for mat in mat_terpilih:
+            # Cek apakah sudah ada di keranjang untuk menghindari duplikasi berlebih
+            item_baru = {
+                "Jenis Konstruksi": jenis_selected,
+                "Type Konstruksi": type_selected,
+                "Material": mat,
+                "Volume Material": 1,
+                "Volume Pasang": 1,
+                "Volume Bongkar": 0,
+            }
+            st.session_state.keranjang.append(item_baru)
+            jumlah_ditambah += 1
+            
+        st.toast(f"✅ Berhasil menambahkan {jumlah_ditambah} material ke keranjang!")
+        st.rerun()
 
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ==========================================
-# 5. BAGIAN 3: KERANJANG WITH REAL-TIME PRICES
+# 5. BAGIAN 3: KERANJANG WITH REAL-TIME PRICES & EDITABLE VOLUME
 # ==========================================
-st.markdown('<div class="section-title">3. Keranjang Input Material & Rincian Harga</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">3. Keranjang Input Material (Isi & Edit Volume di Sini)</div>', unsafe_allow_html=True)
 
 if st.session_state.keranjang:
     df_cart_raw = pd.DataFrame(st.session_state.keranjang)
@@ -277,7 +278,7 @@ if st.session_state.keranjang:
     df_cart_raw["Harga Material"] = df_cart_raw.apply(hitung_biaya_material, axis=1)
     df_cart_raw["Subtotal"] = df_cart_raw["Harga Material"] + df_cart_raw["Biaya Pasang"] + df_cart_raw["Biaya Bongkar"]
 
-    st.caption("💡 **Petunjuk:** Ubah angka volume di bawah ini, nilai **Harga Material**, **Biaya Pasang**, **Biaya Bongkar**, dan **Subtotal** akan otomatis berubah.")
+    st.caption("💡 **Petunjuk:** Ketik angka pada kolom **Vol Material**, **Vol Pasang**, dan **Vol Bongkar** untuk menyesuaikan jumlahnya. Harga akan langsung terhitung.")
 
     # 2. Tampilkan Tabel Interaktif dengan Rincian Harga
     edited_df = st.data_editor(
@@ -320,7 +321,7 @@ if st.session_state.keranjang:
     df_hasil = edited_df
 
 else:
-    st.info("💡 Keranjang masih kosong. Silakan pilih material di atas lalu klik **➕ Tambah ke Keranjang**.")
+    st.info("💡 Keranjang masih kosong. Silakan centang material pada daftar di atas lalu klik **➕ Masukkan Material Terpilih ke Keranjang**.")
     total_biaya = 0.0
     df_hasil = pd.DataFrame()
 
