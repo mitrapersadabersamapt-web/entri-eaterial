@@ -63,22 +63,23 @@ st.markdown(
     }
     .total-box {
         background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
-        border: 2px solid #f59e0b;
+        border: 2px solid #dc2626; /* KOTAK MERAH */
         padding: 18px 24px;
         border-radius: 12px;
         text-align: left;
         margin-top: 15px;
         margin-bottom: 20px;
+        box-shadow: 0 0 10px rgba(220, 38, 38, 0.2);
     }
     .total-title {
-        color: #b45309;
+        color: #dc2626;
         font-size: 14px;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.5px;
     }
     .total-amount {
-        color: #78350f;
+        color: #991b1b;
         font-size: 32px;
         font-weight: 800;
         margin-top: 4px;
@@ -211,9 +212,9 @@ with tab_entri:
                     "Jenis Konstruksi": jenis_selected,
                     "Type Konstruksi": type_selected,
                     "Material": mat,
-                    "Volume Material": 0,  # Nilai awal 0
-                    "Volume Pasang": 0,    # Nilai awal 0
-                    "Volume Bongkar": 0,   # Nilai awal 0
+                    "Volume Material": 0,
+                    "Volume Pasang": 0,
+                    "Volume Bongkar": 0,
                 }
                 st.session_state.keranjang.append(item_baru)
                 jumlah_ditambah += 1
@@ -318,6 +319,7 @@ with tab_entri:
         total_biaya = 0.0
         df_hasil = pd.DataFrame()
 
+    # BOX TOTAL ESTIMASI DENGAN KOTAK MERAH
     st.markdown(
         f"""
         <div class="total-box">
@@ -342,7 +344,12 @@ with tab_entri:
                 try:
                     nama_pekerjaan_kirim = nama_pekerjaan.strip() if nama_pekerjaan.strip() else "-"
                     payload = []
-                    for item in df_hasil.to_dict("records"):
+                    records = df_hasil.to_dict("records")
+                    
+                    for idx, item in enumerate(records):
+                        # Total Estimasi hanya diisi angka pada baris pertama (idx == 0)
+                        estimasi_val = round(float(total_biaya), 2) if idx == 0 else ""
+                        
                         payload.append({
                             "NAMA PEKERJAAN": nama_pekerjaan_kirim,
                             "ALAMAT PEKERJAAN": alamat_pekerjaan if alamat_pekerjaan.strip() else "-",
@@ -357,7 +364,7 @@ with tab_entri:
                             "HARGA MATERIAL": round(float(item["Harga Material"]), 2),
                             "BIAYA PASANG": round(float(item["Biaya Pasang"]), 2),
                             "BIAYA BONGKAR": round(float(item["Biaya Bongkar"]), 2),
-                            "TOTAL ESTIMASI": round(float(total_biaya), 2),
+                            "TOTAL ESTIMASI": estimasi_val,
                         })
 
                     with st.spinner("Sedang mengunggah data ke Google Sheets..."):
@@ -403,7 +410,7 @@ with tab_kelola:
         st.warning("⚠️ Belum ada data pekerjaan tersimpan di Google Sheets atau format kolom belum sesuai.")
         st.info("💡 Silakan submit minimal 1 data pekerjaan dari **Tab 1 (Entri Pekerjaan Baru)** terlebih dahulu.")
     else:
-        list_pekerjaan = [p for p in df_gsheet["NAMA PEKERJAAN"].dropna().unique().tolist() if str(p).strip() != ""]
+        list_pekerjaan = [p for p in df_gsheet["NAMA PEKERJAAN"].dropna().unique().tolist() if str(p).strip() != "" and str(p).strip() != "-"]
 
         if not list_pekerjaan:
             st.warning("⚠️ Belum ada nama pekerjaan yang tersimpan.")
@@ -494,6 +501,7 @@ with tab_kelola:
             subtotal_edit = edited_sheet_df["HARGA MATERIAL"] + edited_sheet_df["BIAYA PASANG"] + edited_sheet_df["BIAYA BONGKAR"]
             total_estimasi_baru = subtotal_edit.sum()
 
+            # BOX TOTAL ESTIMASI DENGAN KOTAK MERAH
             st.markdown(
                 f"""
                 <div class="total-box">
@@ -512,7 +520,11 @@ with tab_kelola:
                     edited_sheet_df["ALAMAT PEKERJAAN"] = header_info.get("ALAMAT PEKERJAAN", "-")
                     edited_sheet_df["JENIS PEKERJAAN"] = header_info.get("JENIS PEKERJAAN", "-")
                     edited_sheet_df["TANGGAL"] = str(header_info.get("TANGGAL", "-"))
-                    edited_sheet_df["TOTAL ESTIMASI"] = float(total_estimasi_baru)
+                    
+                    # Isi TOTAL ESTIMASI hanya di baris pertama
+                    edited_sheet_df["TOTAL ESTIMASI"] = ""
+                    if not edited_sheet_df.empty:
+                        edited_sheet_df.iloc[0, edited_sheet_df.columns.get_loc("TOTAL ESTIMASI")] = float(total_estimasi_baru)
 
                     df_final_all = pd.concat([df_gsheet_sisa, edited_sheet_df], ignore_index=True)
 
