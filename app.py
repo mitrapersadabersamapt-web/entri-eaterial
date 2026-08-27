@@ -15,7 +15,7 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2. CUSTOM CSS UNTUK TAMPILAN CERAH & KOTAK MERAH
+# 2. CUSTOM CSS UNTUK TAMPILAN
 # ==========================================
 st.markdown(
     """
@@ -62,7 +62,6 @@ st.markdown(
         border-bottom: 2px solid #e2e8f0;
         padding-bottom: 8px;
     }
-    /* STYLING KOTAK MERAH TOTAL ESTIMASI */
     .total-box {
         background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
         border: 2px solid #dc2626 !important;
@@ -124,7 +123,7 @@ except Exception:
         df_master = load_and_clean_master("MATERIAL 1_3.xlsx")
 
 # ==========================================
-# 5. INISIALISASI SESSION STATE & CALLBACK
+# 5. INISIALISASI SESSION STATE & CALLBACK AMAN
 # ==========================================
 if "keranjang" not in st.session_state:
     st.session_state.keranjang = []
@@ -132,25 +131,13 @@ if "keranjang" not in st.session_state:
 if "pesan_sukses" not in st.session_state:
     st.session_state.pesan_sukses = False
 
-if "input_nama_pekerjaan" not in st.session_state:
-    st.session_state.input_nama_pekerjaan = ""
+# Gunakan key unik versi/counter untuk mereset widget input text secara aman
+if "form_version" not in st.session_state:
+    st.session_state.form_version = 0
 
-if "input_alamat_pekerjaan" not in st.session_state:
-    st.session_state.input_alamat_pekerjaan = ""
-
-if "input_jenis_pekerjaan" not in st.session_state:
-    st.session_state.input_jenis_pekerjaan = "SAR"
-
-if "input_tanggal" not in st.session_state:
-    st.session_state.input_tanggal = datetime.date.today()
-
-# Fungsi Reset Form & Keranjang Aman (Callback)
-def reset_form_entri():
-    st.session_state.input_nama_pekerjaan = ""
-    st.session_state.input_alamat_pekerjaan = ""
-    st.session_state.input_jenis_pekerjaan = "SAR"
-    st.session_state.input_tanggal = datetime.date.today()
+def reset_seluruh_form():
     st.session_state.keranjang = []
+    st.session_state.form_version += 1
 
 # BANNER HEADER APLIKASI
 st.markdown(
@@ -176,26 +163,28 @@ tab_entri, tab_kelola = st.tabs(["📝 Entri Pekerjaan Baru", "🔍 Cari & Edit 
 # TAB 1: ENTRI PEKERJAAN BARU
 # ==============================================================================
 with tab_entri:
+    ver = st.session_state.form_version
+    
     st.markdown('<div class="section-title">1. Header Data Pekerjaan (Opsional)</div>', unsafe_allow_html=True)
     col_h1, col_h2 = st.columns(2)
     with col_h1:
         nama_pekerjaan = st.text_input(
             "NAMA PEKERJAAN (Opsional) :",
             placeholder="Masukkan Nama Pekerjaan (Boleh Dikosongkan)",
-            key="input_nama_pekerjaan"
+            key=f"input_nama_{ver}"
         )
         alamat_pekerjaan = st.text_area(
             "ALAMAT PEKERJAAN :",
             placeholder="Masukkan Alamat Lengkap Pekerjaan...",
-            key="input_alamat_pekerjaan"
+            key=f"input_alamat_{ver}"
         )
     with col_h2:
         jenis_pekerjaan = st.selectbox(
             "JENIS PEKERJAAN :",
             ["SAR", "PFK", "PREVENTIF", "KEYPOINT", "PEMELIHARAAN JARINGAN"],
-            key="input_jenis_pekerjaan"
+            key=f"input_jenis_{ver}"
         )
-        tanggal = st.date_input("TANGGAL :", key="input_tanggal")
+        tanggal = st.date_input("TANGGAL :", key=f"input_tanggal_{ver}")
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -331,7 +320,7 @@ with tab_entri:
                 "Biaya Bongkar": st.column_config.NumberColumn("Biaya Bongkar", format="Rp %d", disabled=True),
                 "Subtotal": st.column_config.NumberColumn("Subtotal", format="Rp %d", disabled=True),
             },
-            use_container_width=True, hide_index=True, key="editor_keranjang"
+            use_container_width=True, hide_index=True, key=f"editor_keranjang_{ver}"
         )
 
         st.session_state.keranjang = edited_df[[
@@ -369,7 +358,8 @@ with tab_entri:
                 st.error("❌ Keranjang masih kosong!")
             else:
                 try:
-                    nama_pekerjaan_kirim = st.session_state.input_nama_pekerjaan.strip() if st.session_state.input_nama_pekerjaan.strip() else "-"
+                    nama_pekerjaan_kirim = nama_pekerjaan.strip() if nama_pekerjaan.strip() else "-"
+                    alamat_pekerjaan_kirim = alamat_pekerjaan.strip() if alamat_pekerjaan.strip() else "-"
                     payload = []
                     records = df_hasil.to_dict("records")
                     
@@ -378,9 +368,9 @@ with tab_entri:
                         
                         payload.append({
                             "NAMA PEKERJAAN": nama_pekerjaan_kirim,
-                            "ALAMAT PEKERJAAN": st.session_state.input_alamat_pekerjaan.strip() if st.session_state.input_alamat_pekerjaan.strip() else "-",
-                            "JENIS PEKERJAAN": st.session_state.input_jenis_pekerjaan,
-                            "TANGGAL": str(st.session_state.input_tanggal),
+                            "ALAMAT PEKERJAAN": alamat_pekerjaan_kirim,
+                            "JENIS PEKERJAAN": jenis_pekerjaan,
+                            "TANGGAL": str(tanggal),
                             "JENIS KONSTRUKSI": item["Jenis Konstruksi"],
                             "TYPE KONSTRUKSI": item["Type Konstruksi"],
                             "NAMA MATERIAL": item["Material"],
@@ -397,8 +387,7 @@ with tab_entri:
                         response = requests.post(WEBHOOK_URL, data=json.dumps(payload), headers={"Content-Type": "application/json"}, timeout=20)
 
                     if response.status_code == 200:
-                        # SET FLAG SUKSES DAN RESET STATE DENGAN MENGGUNAKAN CALLBACK AMAN
-                        reset_form_entri()
+                        reset_seluruh_form()
                         st.session_state.pesan_sukses = True
                         st.cache_data.clear()
                         st.rerun()
@@ -528,7 +517,6 @@ with tab_kelola:
             subtotal_edit = edited_sheet_df["HARGA MATERIAL"] + edited_sheet_df["BIAYA PASANG"] + edited_sheet_df["BIAYA BONGKAR"]
             total_estimasi_baru = subtotal_edit.sum()
 
-            # KOTAK TOTAL ESTIMASI BINGKAI MERAH UNTUK MENU EDIT
             st.markdown(
                 f"""
                 <div class="total-box">
