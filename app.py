@@ -151,7 +151,7 @@ st.markdown(
 
 # NOTIFIKASI BERHASIL
 if st.session_state.pesan_sukses:
-    st.success("🎉 **DATA BERHASIL DISIMPAN KE GOOGLE SHEETS! FORM PEKERJAAN & KERANJANG TELAH DI-RESET.**")
+    st.success("🎉 **DATA BERHASIL DISIMPAN KE GOOGLE SHEETS! FORM PEKERJAAN & KERANJANG TELAH DI-RESET KE AWAL.**")
     st.balloons()
     st.session_state.pesan_sukses = False
 
@@ -192,12 +192,12 @@ with tab_entri:
 
     list_jenis = sorted(df_master["JENIS KONSTRUKSI"].unique().tolist())
     with col_k1:
-        jenis_selected = st.selectbox("1. Pilih Jenis Konstruksi:", list_jenis, key="entri_j_konst")
+        jenis_selected = st.selectbox("1. Pilih Jenis Konstruksi:", list_jenis, key=f"entri_j_konst_{ver}")
 
     df_filtered_jenis = df_master[df_master["JENIS KONSTRUKSI"] == jenis_selected]
     with col_k2:
         list_type = sorted(df_filtered_jenis["TYPE KONSTRUKSI"].unique().tolist())
-        type_selected = st.selectbox("2. Pilih Type Konstruksi:", list_type, key="entri_t_konst")
+        type_selected = st.selectbox("2. Pilih Type Konstruksi:", list_type, key=f"entri_t_konst_{ver}")
 
     df_filtered = df_filtered_jenis[df_filtered_jenis["TYPE KONSTRUKSI"] == type_selected].copy()
     st.caption("☑️ **Tandai / Centang material yang akan dipakai di bawah ini, lalu klik tombol tambah ke keranjang:**")
@@ -213,10 +213,10 @@ with tab_entri:
         },
         use_container_width=True,
         hide_index=True,
-        key=f"editor_pilih_{jenis_selected}_{type_selected}"
+        key=f"editor_pilih_{jenis_selected}_{type_selected}_{ver}"
     )
 
-    if st.button("➕ Masukkan Material Terpilih ke Keranjang", type="primary", key="btn_add_katalog"):
+    if st.button("➕ Masukkan Material Terpilih ke Keranjang", type="primary", key=f"btn_add_katalog_{ver}"):
         mat_terpilih = selected_materials_editor[selected_materials_editor["Pilih"] == True]["Nama Material"].tolist()
         if not mat_terpilih:
             st.warning("⚠️ Harap centang minimal satu material terlebih dahulu!")
@@ -241,15 +241,15 @@ with tab_entri:
     st.markdown('<div class="section-title">3. Material Tambahan</div>', unsafe_allow_html=True)
     with st.expander("➕ **Klik di sini untuk menambah Material Tambahan di luar paket konstruksi**", expanded=False):
         all_materials = sorted(df_master["NAMA MATERIAL"].unique().tolist())
-        material_tambahan = st.selectbox("Pilih / Cari Nama Material Tambahan:", all_materials, key="mat_tambahan")
+        material_tambahan = st.selectbox("Pilih / Cari Nama Material Tambahan:", all_materials, key=f"mat_tambahan_{ver}")
         
         col_tv1, col_tv2, col_tv3 = st.columns(3)
         with col_tv1:
-            vol_mat_t = st.number_input("Vol Material", min_value=0, value=0, step=1, key="vol_mat_t")
+            vol_mat_t = st.number_input("Vol Material", min_value=0, value=0, step=1, key=f"vol_mat_t_{ver}")
         with col_tv2:
-            vol_pasang_t = st.number_input("Vol Pasang", min_value=0, value=0, step=1, key="vol_pasang_t")
+            vol_pasang_t = st.number_input("Vol Pasang", min_value=0, value=0, step=1, key=f"vol_pasang_t_{ver}")
         with col_tv3:
-            vol_bongkar_t = st.number_input("Vol Bongkar", min_value=0, value=0, step=1, key="vol_bongkar_t")
+            vol_bongkar_t = st.number_input("Vol Bongkar", min_value=0, value=0, step=1, key=f"vol_bongkar_t_{ver}")
                 
         def tambah_material_tambahan():
             if vol_mat_t == 0 and vol_pasang_t == 0 and vol_bongkar_t == 0:
@@ -275,7 +275,7 @@ with tab_entri:
             st.session_state.keranjang.append(item_tambahan)
             st.toast("✅ Material Tambahan berhasil masuk ke keranjang!")
 
-        st.button("➕ Tambahkan Material Tambahan", on_click=tambah_material_tambahan, key="btn_add_tambahan")
+        st.button("➕ Tambahkan Material Tambahan", on_click=tambah_material_tambahan, key=f"btn_add_tambahan_{ver}")
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -402,7 +402,7 @@ with tab_entri:
                     st.error(f"⚠️ Terjadi kesalahan saat mengirim: {e}")
 
 # ==============================================================================
-# TAB 2: CARI & EDIT PEKERJAAN DIENTRI (DENGAN REFRESH AUTO & DETEKSI KOLOM LENTUR)
+# TAB 2: CARI & EDIT PEKERJAAN DIENTRI
 # ==============================================================================
 with tab_kelola:
     st.markdown('<div class="section-title">🔍 Cari & Kelola Pekerjaan Terdaftar</div>', unsafe_allow_html=True)
@@ -411,7 +411,6 @@ with tab_kelola:
         st.cache_data.clear()
         st.rerun()
     
-    # Fungsi pembaca data Sheets dengan auto-cleaning header
     def fetch_sheet_data():
         try:
             res = requests.get(WEBHOOK_URL, timeout=15)
@@ -419,7 +418,6 @@ with tab_kelola:
                 data = res.json()
                 if isinstance(data, list) and len(data) > 0:
                     df = pd.DataFrame(data)
-                    # Normalisasi Nama Kolom (Uppercase dan hapus spasi samping)
                     df.columns = [str(c).strip().upper() for c in df.columns]
                     return df, None
                 else:
@@ -435,7 +433,6 @@ with tab_kelola:
         st.warning(f"⚠️ {err_msg if err_msg else 'Belum ada data pekerjaan tersimpan di Google Sheets.'}")
         st.info("💡 Silakan submit minimal 1 data pekerjaan dari **Tab 1 (Entri Pekerjaan Baru)** terlebih dahulu.")
     else:
-        # Cari nama kolom Alamat secara fleksibel
         col_alamat = None
         for candidate in ["ALAMAT PEKERJAAN", "ALAMAT", "ALAMAT_PEKERJAAN", "NAMA PEKERJAAN"]:
             if candidate in df_gsheet.columns:
@@ -456,7 +453,6 @@ with tab_kelola:
                     key="sb_alamat_edit"
                 )
 
-                # Filter data berdasarkan alamat yang dipilih
                 df_pekerjaan_edit = df_gsheet[df_gsheet[col_alamat] == alamat_selected].copy()
                 header_info = df_pekerjaan_edit.iloc[0]
                 
@@ -469,7 +465,6 @@ with tab_kelola:
                 st.markdown("---")
                 st.markdown("### 1. Edit Volume / Hapus Material Terdaftar")
                 
-                # Pastikan kolom-kolom utama ada di dataframe
                 req_cols = ["JENIS KONSTRUKSI", "TYPE KONSTRUKSI", "NAMA MATERIAL", "VOL MATERIAL", "VOL PASANG", "VOL BONGKAR"]
                 for rc in req_cols:
                     if rc not in df_pekerjaan_edit.columns:
@@ -587,7 +582,8 @@ with tab_kelola:
                             )
 
                         if res_update.status_code in [200, 201, 302]:
-                            st.success("✅ Data berhasil diperbarui di Google Sheets!")
+                            st.success("✅ Perubahan data berhasil disimpan!")
+                            st.balloons()
                             st.cache_data.clear()
                             st.rerun()
                         else:
