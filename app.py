@@ -145,300 +145,409 @@ st.markdown(
     """
     <div class="pln-header">
         <h1>⚡ SISTEM ENTRI MATERIAL PLN</h1>
-        <p>Aplikasi Input Rekap Material & Estimasi Biaya Pekerjaan</p>
+        <p>Aplikasi Input & Kelola Rekap Material Pekerjaan</p>
     </div>
 """,
     unsafe_allow_html=True,
 )
 
 if st.session_state.pesan_sukses:
-    st.success("🎉 **SELAMAT! DATA BERHASIL DIKIRIM KE GOOGLE SHEET**")
+    st.success("🎉 **SELAMAT! DATA BERHASIL DISIMPAN KE GOOGLE SHEET**")
     st.balloons()
     st.session_state.pesan_sukses = False
 
-# ==========================================
-# 3. BAGIAN 1: HEADER PEKERJAAN (OPSIONAL)
-# ==========================================
-st.markdown('<div class="section-title">1. Header Data Pekerjaan (Opsional)</div>', unsafe_allow_html=True)
+# NAVIGATION TAB
+tab_entri, tab_kelola = st.tabs(["📝 Entri Pekerjaan Baru", "🔍 Cari & Edit Pekerjaan Dientri"])
 
-col_h1, col_h2 = st.columns(2)
+# ==============================================================================
+# TAB 1: ENTRI PEKERJAAN BARU
+# ==============================================================================
+with tab_entri:
+    # 1. HEADER DATA PEKERJAAN
+    st.markdown('<div class="section-title">1. Header Data Pekerjaan (Opsional)</div>', unsafe_allow_html=True)
+    col_h1, col_h2 = st.columns(2)
+    with col_h1:
+        nama_pekerjaan = st.text_input(
+            "NAMA PEKERJAAN (Opsional) :", placeholder="Masukkan Nama Pekerjaan (Boleh Dikosongkan)", key="entri_nama"
+        )
+        alamat_pekerjaan = st.text_area(
+            "ALAMAT PEKERJAAN :", placeholder="Masukkan Alamat Lengkap Pekerjaan...", key="entri_alamat"
+        )
+    with col_h2:
+        jenis_pekerjaan = st.selectbox(
+            "JENIS PEKERJAAN :",
+            ["SAR", "PFK", "PREVENTIF", "KEYPOINT", "PEMELIHARAAN JARINGAN"],
+            key="entri_jenis"
+        )
+        tanggal = st.date_input("TANGGAL :", key="entri_tgl")
 
-with col_h1:
-    nama_pekerjaan = st.text_input(
-        "NAMA PEKERJAAN (Opsional) :", placeholder="Masukkan Nama Pekerjaan (Boleh Dikosongkan)"
-    )
-    alamat_pekerjaan = st.text_area(
-        "ALAMAT PEKERJAAN :", placeholder="Masukkan Alamat Lengkap Pekerjaan..."
-    )
+    st.markdown("<br>", unsafe_allow_html=True)
 
-with col_h2:
-    jenis_pekerjaan = st.selectbox(
-        "JENIS PEKERJAAN :",
-        ["SAR", "PFK", "PREVENTIF", "KEYPOINT", "PEMELIHARAAN JARINGAN"],
-    )
-    tanggal = st.date_input("TANGGAL :")
+    # 2. PILIH MATERIAL PER KONSTRUKSI
+    st.markdown('<div class="section-title">2. Pilih Material Per Konstruksi</div>', unsafe_allow_html=True)
+    col_k1, col_k2, col_k3 = st.columns([1.2, 1.2, 1])
 
-st.markdown("<br>", unsafe_allow_html=True)
-
-# ==========================================
-# 4. BAGIAN 2: PILIH MATERIAL PER KONSTRUKSI
-# ==========================================
-st.markdown('<div class="section-title">2. Pilih Material Per Konstruksi</div>', unsafe_allow_html=True)
-
-col_k1, col_k2, col_k3 = st.columns([1.2, 1.2, 1])
-
-with col_k1:
     list_jenis = sorted(df_master["JENIS KONSTRUKSI"].unique().tolist())
-    jenis_selected = st.selectbox("1. Pilih Jenis Konstruksi:", list_jenis)
+    with col_k1:
+        jenis_selected = st.selectbox("1. Pilih Jenis Konstruksi:", list_jenis, key="entri_j_konst")
 
-df_filtered_jenis = df_master[df_master["JENIS KONSTRUKSI"] == jenis_selected]
+    df_filtered_jenis = df_master[df_master["JENIS KONSTRUKSI"] == jenis_selected]
+    with col_k2:
+        list_type = sorted(df_filtered_jenis["TYPE KONSTRUKSI"].unique().tolist())
+        type_selected = st.selectbox("2. Pilih Type Konstruksi:", list_type, key="entri_t_konst")
 
-with col_k2:
-    list_type = sorted(df_filtered_jenis["TYPE KONSTRUKSI"].unique().tolist())
-    type_selected = st.selectbox("2. Pilih Type Konstruksi:", list_type)
+    with col_k3:
+        jumlah_pemakaian = st.number_input(
+            "3. Jumlah Pemakaian (Set/Unit):",
+            min_value=1, value=1, step=1, key="entri_jml"
+        )
 
-with col_k3:
-    jumlah_pemakaian = st.number_input(
-        "3. Jumlah Pemakaian (Set/Unit):",
-        min_value=1,
-        value=1,
-        step=1,
-        help="Jumlah unit/set konstruksi ini yang digunakan.",
-    )
+    df_filtered = df_filtered_jenis[df_filtered_jenis["TYPE KONSTRUKSI"] == type_selected].copy()
+    st.caption("☑️ **Tandai / Centang material yang akan dipakai di bawah ini, lalu klik tombol tambah ke keranjang:**")
 
-df_filtered = df_filtered_jenis[df_filtered_jenis["TYPE KONSTRUKSI"] == type_selected].copy()
+    df_filtered["Pilih"] = False
+    df_pilihan_display = df_filtered[["Pilih", "NAMA MATERIAL"]].rename(columns={"NAMA MATERIAL": "Nama Material"})
 
-st.caption("☑️ **Tandai / Centang material yang akan dipakai di bawah ini, lalu klik tombol tambah ke keranjang:**")
-
-# Siapkan data untuk Data Editor (Checkbox)
-df_filtered["Pilih"] = False
-df_pilihan_display = df_filtered[["Pilih", "NAMA MATERIAL"]].rename(columns={"NAMA MATERIAL": "Nama Material"})
-
-# Tabel Checkbox Material
-selected_materials_editor = st.data_editor(
-    df_pilihan_display,
-    column_config={
-        "Pilih": st.column_config.CheckboxColumn("Pilih", default=False),
-        "Nama Material": st.column_config.TextColumn("Nama Material", disabled=True),
-    },
-    use_container_width=True,
-    hide_index=True,
-    key=f"editor_pilih_{jenis_selected}_{type_selected}"
-)
-
-# Tombol Tambah Material Per Konstruksi Tercentang
-if st.button("➕ Masukkan Material Terpilih ke Keranjang", type="primary"):
-    mat_terpilih = selected_materials_editor[selected_materials_editor["Pilih"] == True]["Nama Material"].tolist()
-    
-    if not mat_terpilih:
-        st.warning("⚠️ Harap centang minimal satu material terlebih dahulu!")
-    else:
-        jumlah_ditambah = 0
-        for mat in mat_terpilih:
-            vol_mat_calc = int(jumlah_pemakaian)
-            vol_pasang_calc = int(jumlah_pemakaian)
-            vol_bongkar_calc = 0
-            
-            item_baru = {
-                "Jenis Konstruksi": jenis_selected,
-                "Type Konstruksi": type_selected,
-                "Material": mat,
-                "Volume Material": vol_mat_calc,
-                "Volume Pasang": vol_pasang_calc,
-                "Volume Bongkar": vol_bongkar_calc,
-            }
-            st.session_state.keranjang.append(item_baru)
-            jumlah_ditambah += 1
-            
-        st.toast(f"✅ Berhasil menambahkan {jumlah_ditambah} material ke keranjang!")
-        st.rerun()
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-# ==========================================
-# 5. BAGIAN 3: MATERIAL TAMBAHAN
-# ==========================================
-st.markdown('<div class="section-title">3. Material Tambahan</div>', unsafe_allow_html=True)
-
-with st.expander("➕ **Klik di sini untuk menambah Material Tambahan di luar paket konstruksi**", expanded=False):
-    col_t1, col_t2 = st.columns(2)
-    
-    with col_t1:
-        jenis_tambahan = st.selectbox("Pilih Jenis Konstruksi (Tambahan):", list_jenis, key="jenis_tambahan")
-        df_filtered_t_jenis = df_master[df_master["JENIS KONSTRUKSI"] == jenis_tambahan]
-        list_type_tambahan = sorted(df_filtered_t_jenis["TYPE KONSTRUKSI"].unique().tolist())
-        type_tambahan = st.selectbox("Pilih Type Konstruksi (Tambahan):", list_type_tambahan, key="type_tambahan")
-        
-    df_filtered_t_type = df_filtered_t_jenis[df_filtered_t_jenis["TYPE KONSTRUKSI"] == type_tambahan]
-    list_mat_tambahan = sorted(df_filtered_t_type["NAMA MATERIAL"].unique().tolist())
-    
-    with col_t2:
-        material_tambahan = st.selectbox("Pilih / Cari Nama Material Tambahan:", list_mat_tambahan, key="mat_tambahan")
-        col_tv1, col_tv2, col_tv3 = st.columns(3)
-        with col_tv1:
-            vol_mat_t = st.number_input("Vol Material", min_value=0, value=1, step=1, key="vol_mat_t")
-        with col_tv2:
-            vol_pasang_t = st.number_input("Vol Pasang", min_value=0, value=1, step=1, key="vol_pasang_t")
-        with col_tv3:
-            vol_bongkar_t = st.number_input("Vol Bongkar", min_value=0, value=0, step=1, key="vol_bongkar_t")
-            
-    def tambah_material_tambahan():
-        item_tambahan = {
-            "Jenis Konstruksi": jenis_tambahan,
-            "Type Konstruksi": type_tambahan,
-            "Material": material_tambahan,
-            "Volume Material": int(vol_mat_t),
-            "Volume Pasang": int(vol_pasang_t),
-            "Volume Bongkar": int(vol_bongkar_t),
-        }
-        st.session_state.keranjang.append(item_tambahan)
-        st.toast("✅ Material Tambahan berhasil masuk ke keranjang!")
-
-    st.button("➕ Tambahkan Material Tambahan", on_click=tambah_material_tambahan)
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-# ==========================================
-# 6. KERANJANG MATERIAL & RINCIAN HARGA
-# ==========================================
-st.markdown('<div class="section-title">4. Keranjang Input Material (Isi & Edit Volume di Sini)</div>', unsafe_allow_html=True)
-
-if st.session_state.keranjang:
-    df_cart_raw = pd.DataFrame(st.session_state.keranjang)
-
-    # Hitung ulang Rincian Harga secara Real-Time berdasarkan Master Data
-    merged = pd.merge(
-        df_cart_raw,
-        df_master,
-        left_on=["Jenis Konstruksi", "Type Konstruksi", "Material"],
-        right_on=["JENIS KONSTRUKSI", "TYPE KONSTRUKSI", "NAMA MATERIAL"],
-        how="left",
-    )
-
-    df_cart_raw["Harga Satuan"] = merged["HARGA MATERIAL"].fillna(0.0)
-    df_cart_raw["Jasa Pasang Satuan"] = merged["JASA PASANG"].fillna(0.0)
-    df_cart_raw["Jasa Bongkar Satuan"] = merged["JASA BONGKAR"].fillna(0.0)
-
-    # Biaya Pasang & Bongkar
-    df_cart_raw["Biaya Pasang"] = df_cart_raw["Volume Pasang"] * df_cart_raw["Jasa Pasang Satuan"]
-    df_cart_raw["Biaya Bongkar"] = df_cart_raw["Volume Bongkar"] * df_cart_raw["Jasa Bongkar Satuan"]
-
-    # Biaya Material (0 jika material bertuliskan PLN)
-    def hitung_biaya_material(row):
-        nama_mat = str(row["Material"]).upper()
-        if "PLN" in nama_mat:
-            return 0.0
-        return row["Volume Material"] * row["Harga Satuan"]
-
-    df_cart_raw["Harga Material"] = df_cart_raw.apply(hitung_biaya_material, axis=1)
-    df_cart_raw["Subtotal"] = df_cart_raw["Harga Material"] + df_cart_raw["Biaya Pasang"] + df_cart_raw["Biaya Bongkar"]
-
-    st.caption("💡 **Petunjuk:** Ubah angka volume jika diperlukan. Harga Material, Biaya Pasang/Bongkar, dan Subtotal akan otomatis menyesuaikan.")
-
-    # Tampilkan Tabel Interaktif dengan Rincian Harga
-    edited_df = st.data_editor(
-        df_cart_raw[[
-            "Jenis Konstruksi",
-            "Type Konstruksi",
-            "Material",
-            "Volume Material",
-            "Volume Pasang",
-            "Volume Bongkar",
-            "Harga Material",
-            "Biaya Pasang",
-            "Biaya Bongkar",
-            "Subtotal"
-        ]],
+    selected_materials_editor = st.data_editor(
+        df_pilihan_display,
         column_config={
-            "Jenis Konstruksi": st.column_config.TextColumn("Jenis Konstruksi", disabled=True),
-            "Type Konstruksi": st.column_config.TextColumn("Type Konstruksi", disabled=True),
-            "Material": st.column_config.TextColumn("Material", disabled=True),
-            "Volume Material": st.column_config.NumberColumn("Vol Material", min_value=0, step=1, required=True),
-            "Volume Pasang": st.column_config.NumberColumn("Vol Pasang", min_value=0, step=1, required=True),
-            "Volume Bongkar": st.column_config.NumberColumn("Vol Bongkar", min_value=0, step=1, required=True),
-            "Harga Material": st.column_config.NumberColumn("Harga Material", format="Rp %d", disabled=True),
-            "Biaya Pasang": st.column_config.NumberColumn("Biaya Pasang", format="Rp %d", disabled=True),
-            "Biaya Bongkar": st.column_config.NumberColumn("Biaya Bongkar", format="Rp %d", disabled=True),
-            "Subtotal": st.column_config.NumberColumn("Subtotal", format="Rp %d", disabled=True),
+            "Pilih": st.column_config.CheckboxColumn("Pilih", default=False),
+            "Nama Material": st.column_config.TextColumn("Nama Material", disabled=True),
         },
         use_container_width=True,
         hide_index=True,
-        key="editor_keranjang",
+        key=f"editor_pilih_{jenis_selected}_{type_selected}"
     )
 
-    # Update state volume jika pengguna mengubah volume di tabel
-    st.session_state.keranjang = edited_df[[
-        "Jenis Konstruksi", "Type Konstruksi", "Material", 
-        "Volume Material", "Volume Pasang", "Volume Bongkar"
-    ]].to_dict("records")
-
-    total_biaya = edited_df["Subtotal"].sum()
-    df_hasil = edited_df
-
-else:
-    st.info("💡 Keranjang masih kosong. Silakan pilih material dari Paket Konstruksi atau Material Tambahan di atas.")
-    total_biaya = 0.0
-    df_hasil = pd.DataFrame()
-
-# KARTU TOTAL ESTIMASI HARGA
-st.markdown(
-    f"""
-    <div class="total-box">
-        <div class="total-title">💰 TOTAL ESTIMASI HARGA PEKERJAAN</div>
-        <div class="total-amount">Rp {total_biaya:,.2f}</div>
-    </div>
-""",
-    unsafe_allow_html=True,
-)
-
-col_act1, col_act2 = st.columns([1, 2])
-with col_act1:
-    if st.button("🗑️ Kosongkan Keranjang", use_container_width=True):
-        st.session_state.keranjang = []
-        st.rerun()
-
-# ==========================================
-# 7. SUBMIT DATA KE GOOGLE SHEETS
-# ==========================================
-with col_act2:
-    if st.button(
-        "🚀 SUBMIT DATA KE GOOGLE SHEETS",
-        type="primary",
-        use_container_width=True,
-    ):
-        if not st.session_state.keranjang:
-            st.error("❌ Keranjang masih kosong! Tambahkan material terlebih dahulu.")
+    if st.button("➕ Masukkan Material Terpilih ke Keranjang", type="primary", key="btn_add_katalog"):
+        mat_terpilih = selected_materials_editor[selected_materials_editor["Pilih"] == True]["Nama Material"].tolist()
+        if not mat_terpilih:
+            st.warning("⚠️ Harap centang minimal satu material terlebih dahulu!")
         else:
-            try:
-                nama_pekerjaan_kirim = nama_pekerjaan.strip() if nama_pekerjaan.strip() else "-"
+            jumlah_ditambah = 0
+            for mat in mat_terpilih:
+                item_baru = {
+                    "Jenis Konstruksi": jenis_selected,
+                    "Type Konstruksi": type_selected,
+                    "Material": mat,
+                    "Volume Material": int(jumlah_pemakaian),
+                    "Volume Pasang": int(jumlah_pemakaian),
+                    "Volume Bongkar": 0,
+                }
+                st.session_state.keranjang.append(item_baru)
+                jumlah_ditambah += 1
+            st.toast(f"✅ Berhasil menambahkan {jumlah_ditambah} material ke keranjang!")
+            st.rerun()
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # 3. MATERIAL TAMBAHAN
+    st.markdown('<div class="section-title">3. Material Tambahan</div>', unsafe_allow_html=True)
+    with st.expander("➕ **Klik di sini untuk menambah Material Tambahan di luar paket konstruksi**", expanded=False):
+        col_t1, col_t2 = st.columns(2)
+        with col_t1:
+            jenis_tambahan = st.selectbox("Pilih Jenis Konstruksi (Tambahan):", list_jenis, key="jenis_tambahan")
+            df_filtered_t_jenis = df_master[df_master["JENIS KONSTRUKSI"] == jenis_tambahan]
+            list_type_tambahan = sorted(df_filtered_t_jenis["TYPE KONSTRUKSI"].unique().tolist())
+            type_tambahan = st.selectbox("Pilih Type Konstruksi (Tambahan):", list_type_tambahan, key="type_tambahan")
+            
+        df_filtered_t_type = df_filtered_t_jenis[df_filtered_t_jenis["TYPE KONSTRUKSI"] == type_tambahan]
+        list_mat_tambahan = sorted(df_filtered_t_type["NAMA MATERIAL"].unique().tolist())
+        
+        with col_t2:
+            material_tambahan = st.selectbox("Pilih / Cari Nama Material Tambahan:", list_mat_tambahan, key="mat_tambahan")
+            col_tv1, col_tv2, col_tv3 = st.columns(3)
+            with col_tv1:
+                vol_mat_t = st.number_input("Vol Material", min_value=0, value=1, step=1, key="vol_mat_t")
+            with col_tv2:
+                vol_pasang_t = st.number_input("Vol Pasang", min_value=0, value=1, step=1, key="vol_pasang_t")
+            with col_tv3:
+                vol_bongkar_t = st.number_input("Vol Bongkar", min_value=0, value=0, step=1, key="vol_bongkar_t")
                 
-                payload = []
-                for item in df_hasil.to_dict("records"):
-                    payload.append({
-                        "NAMA PEKERJAAN": nama_pekerjaan_kirim,
-                        "ALAMAT PEKERJAAN": alamat_pekerjaan,
-                        "JENIS PEKERJAAN": jenis_pekerjaan,
-                        "TANGGAL": str(tanggal),
-                        "JENIS KONSTRUKSI": item["Jenis Konstruksi"],
-                        "TYPE KONSTRUKSI": item["Type Konstruksi"],
-                        "NAMA MATERIAL": item["Material"],
-                        "VOL MATERIAL": int(item["Volume Material"]),
-                        "VOL PASANG": int(item["Volume Pasang"]),
-                        "VOL BONGKAR": int(item["Volume Bongkar"]),
-                        "HARGA MATERIAL": round(float(item["Harga Material"]), 2),
-                        "BIAYA PASANG": round(float(item["Biaya Pasang"]), 2),
-                        "BIAYA BONGKAR": round(float(item["Biaya Bongkar"]), 2),
-                        "TOTAL ESTIMASI": round(float(total_biaya), 2),
-                    })
+        def tambah_material_tambahan():
+            item_tambahan = {
+                "Jenis Konstruksi": jenis_tambahan,
+                "Type Konstruksi": type_tambahan,
+                "Material": material_tambahan,
+                "Volume Material": int(vol_mat_t),
+                "Volume Pasang": int(vol_pasang_t),
+                "Volume Bongkar": int(vol_bongkar_t),
+            }
+            st.session_state.keranjang.append(item_tambahan)
+            st.toast("✅ Material Tambahan berhasil masuk ke keranjang!")
 
-                with st.spinner("Sedang mengunggah data ke Google Sheets..."):
-                    response = requests.post(WEBHOOK_URL, json=payload, timeout=15)
+        st.button("➕ Tambahkan Material Tambahan", on_click=tambah_material_tambahan, key="btn_add_tambahan")
 
-                if response.status_code == 200:
-                    st.session_state.pesan_sukses = True
-                    st.session_state.keranjang = []
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # 4. KERANJANG MATERIAL & RINCIAN HARGA
+    st.markdown('<div class="section-title">4. Keranjang Input Material (Isi & Edit Volume di Sini)</div>', unsafe_allow_html=True)
+    if st.session_state.keranjang:
+        df_cart_raw = pd.DataFrame(st.session_state.keranjang)
+        merged = pd.merge(
+            df_cart_raw, df_master,
+            left_on=["Jenis Konstruksi", "Type Konstruksi", "Material"],
+            right_on=["JENIS KONSTRUKSI", "TYPE KONSTRUKSI", "NAMA MATERIAL"],
+            how="left",
+        )
+        df_cart_raw["Harga Satuan"] = merged["HARGA MATERIAL"].fillna(0.0)
+        df_cart_raw["Jasa Pasang Satuan"] = merged["JASA PASANG"].fillna(0.0)
+        df_cart_raw["Jasa Bongkar Satuan"] = merged["JASA BONGKAR"].fillna(0.0)
+
+        df_cart_raw["Biaya Pasang"] = df_cart_raw["Volume Pasang"] * df_cart_raw["Jasa Pasang Satuan"]
+        df_cart_raw["Biaya Bongkar"] = df_cart_raw["Volume Bongkar"] * df_cart_raw["Jasa Bongkar Satuan"]
+
+        def hitung_biaya_material(row):
+            return 0.0 if "PLN" in str(row["Material"]).upper() else row["Volume Material"] * row["Harga Satuan"]
+
+        df_cart_raw["Harga Material"] = df_cart_raw.apply(hitung_biaya_material, axis=1)
+        df_cart_raw["Subtotal"] = df_cart_raw["Harga Material"] + df_cart_raw["Biaya Pasang"] + df_cart_raw["Biaya Bongkar"]
+
+        edited_df = st.data_editor(
+            df_cart_raw[[
+                "Jenis Konstruksi", "Type Konstruksi", "Material",
+                "Volume Material", "Volume Pasang", "Volume Bongkar",
+                "Harga Material", "Biaya Pasang", "Biaya Bongkar", "Subtotal"
+            ]],
+            column_config={
+                "Jenis Konstruksi": st.column_config.TextColumn("Jenis Konstruksi", disabled=True),
+                "Type Konstruksi": st.column_config.TextColumn("Type Konstruksi", disabled=True),
+                "Material": st.column_config.TextColumn("Material", disabled=True),
+                "Volume Material": st.column_config.NumberColumn("Vol Material", min_value=0, step=1, required=True),
+                "Volume Pasang": st.column_config.NumberColumn("Vol Pasang", min_value=0, step=1, required=True),
+                "Volume Bongkar": st.column_config.NumberColumn("Vol Bongkar", min_value=0, step=1, required=True),
+                "Harga Material": st.column_config.NumberColumn("Harga Material", format="Rp %d", disabled=True),
+                "Biaya Pasang": st.column_config.NumberColumn("Biaya Pasang", format="Rp %d", disabled=True),
+                "Biaya Bongkar": st.column_config.NumberColumn("Biaya Bongkar", format="Rp %d", disabled=True),
+                "Subtotal": st.column_config.NumberColumn("Subtotal", format="Rp %d", disabled=True),
+            },
+            use_container_width=True, hide_index=True, key="editor_keranjang"
+        )
+
+        st.session_state.keranjang = edited_df[[
+            "Jenis Konstruksi", "Type Konstruksi", "Material", 
+            "Volume Material", "Volume Pasang", "Volume Bongkar"
+        ]].to_dict("records")
+
+        total_biaya = edited_df["Subtotal"].sum()
+        df_hasil = edited_df
+    else:
+        st.info("💡 Keranjang masih kosong.")
+        total_biaya = 0.0
+        df_hasil = pd.DataFrame()
+
+    st.markdown(
+        f"""
+        <div class="total-box">
+            <div class="total-title">💰 TOTAL ESTIMASI HARGA PEKERJAAN</div>
+            <div class="total-amount">Rp {total_biaya:,.2f}</div>
+        </div>
+    """,
+        unsafe_allow_html=True,
+    )
+
+    col_act1, col_act2 = st.columns([1, 2])
+    with col_act1:
+        if st.button("🗑️ Kosongkan Keranjang", use_container_width=True, key="btn_reset"):
+            st.session_state.keranjang = []
+            st.rerun()
+
+    with col_act2:
+        if st.button("🚀 SUBMIT DATA KE GOOGLE SHEETS", type="primary", use_container_width=True, key="btn_submit"):
+            if not st.session_state.keranjang:
+                st.error("❌ Keranjang masih kosong!")
+            else:
+                try:
+                    nama_pekerjaan_kirim = nama_pekerjaan.strip() if nama_pekerjaan.strip() else "-"
+                    payload = []
+                    for item in df_hasil.to_dict("records"):
+                        payload.append({
+                            "NAMA PEKERJAAN": nama_pekerjaan_kirim,
+                            "ALAMAT PEKERJAAN": alamat_pekerjaan,
+                            "JENIS PEKERJAAN": jenis_pekerjaan,
+                            "TANGGAL": str(tanggal),
+                            "JENIS KONSTRUKSI": item["Jenis Konstruksi"],
+                            "TYPE KONSTRUKSI": item["Type Konstruksi"],
+                            "NAMA MATERIAL": item["Material"],
+                            "VOL MATERIAL": int(item["Volume Material"]),
+                            "VOL PASANG": int(item["Volume Pasang"]),
+                            "VOL BONGKAR": int(item["Volume Bongkar"]),
+                            "HARGA MATERIAL": round(float(item["Harga Material"]), 2),
+                            "BIAYA PASANG": round(float(item["Biaya Pasang"]), 2),
+                            "BIAYA BONGKAR": round(float(item["Biaya Bongkar"]), 2),
+                            "TOTAL ESTIMASI": round(float(total_biaya), 2),
+                        })
+
+                    with st.spinner("Sedang mengunggah data ke Google Sheets..."):
+                        response = requests.post(WEBHOOK_URL, json=payload, timeout=15)
+
+                    if response.status_code == 200:
+                        st.session_state.pesan_sukses = True
+                        st.session_state.keranjang = []
+                        st.rerun()
+                    else:
+                        st.error(f"⚠️ Gagal mengirim data. Status Code: {response.status_code}")
+                except Exception as e:
+                    st.error(f"⚠️ Terjadi kesalahan: {e}")
+
+# ==============================================================================
+# TAB 2: CARI & EDIT PEKERJAAN DIENTRI
+# ==============================================================================
+with tab_kelola:
+    st.markdown('<div class="section-title">🔍 Cari & Kelola Pekerjaan Terdaftar</div>', unsafe_allow_html=True)
+    
+    # Ambil Data dari Google Sheets via GET Request
+    if st.button("🔄 Reload / Ambil Data Terbaru dari Google Sheets", key="btn_fetch"):
+        st.cache_data.clear()
+    
+    @st.cache_data(ttl=60)
+    def fetch_sheet_data():
+        try:
+            res = requests.get(WEBHOOK_URL, timeout=15)
+            if res.status_code == 200:
+                data = res.json()
+                return pd.DataFrame(data)
+            return pd.DataFrame()
+        except Exception:
+            return pd.DataFrame()
+
+    df_gsheet = fetch_sheet_data()
+
+    if df_gsheet.empty:
+        st.warning("⚠️ Belum ada data pekerjaan tersimpan di Google Sheets atau URL Webhook belum terkonfigurasi dengan benar.")
+    else:
+        # Pilihan Pekerjaan untuk Diedit
+        list_pekerjaan = df_gsheet["NAMA PEKERJAAN"].unique().tolist()
+        pekerjaan_selected = st.selectbox("🎯 Pilih Pekerjaan yang Akan Dikelola / Diedit:", list_pekerjaan)
+
+        df_pekerjaan_edit = df_gsheet[df_gsheet["NAMA PEKERJAAN"] == pekerjaan_selected].copy()
+        
+        # Ambil Detail Header Pekerjaan
+        header_info = df_pekerjaan_edit.iloc[0]
+        st.info(f"📌 **Detail Pekerjaan:** {header_info.get('NAMA PEKERJAAN', '-')} | **Jenis:** {header_info.get('JENIS PEKERJAAN', '-')} | **Alamat:** {header_info.get('ALAMAT PEKERJAAN', '-')} | **Tanggal:** {header_info.get('TANGGAL', '-')}")
+
+        st.markdown("---")
+        st.markdown("### 1. Edit Volume / Hapus Material Terdaftar")
+        
+        # Kolom numerik
+        cols_num = ["VOL MATERIAL", "VOL PASANG", "VOL BONGKAR", "HARGA MATERIAL", "BIAYA PASANG", "BIAYA BONGKAR"]
+        for c in cols_num:
+            if c in df_pekerjaan_edit.columns:
+                df_pekerjaan_edit[c] = pd.to_numeric(df_pekerjaan_edit[c], errors="coerce").fillna(0)
+
+        # Form Edit Tabel
+        edited_sheet_df = st.data_editor(
+            df_pekerjaan_edit[[
+                "JENIS KONSTRUKSI", "TYPE KONSTRUKSI", "NAMA MATERIAL",
+                "VOL MATERIAL", "VOL PASANG", "VOL BONGKAR"
+            ]],
+            column_config={
+                "JENIS KONSTRUKSI": st.column_config.TextColumn("Jenis Konstruksi", disabled=True),
+                "TYPE KONSTRUKSI": st.column_config.TextColumn("Type Konstruksi", disabled=True),
+                "NAMA MATERIAL": st.column_config.TextColumn("Nama Material", disabled=True),
+                "VOL MATERIAL": st.column_config.NumberColumn("Vol Material", min_value=0, step=1),
+                "VOL PASANG": st.column_config.NumberColumn("Vol Pasang", min_value=0, step=1),
+                "VOL BONGKAR": st.column_config.NumberColumn("Vol Bongkar", min_value=0, step=1),
+            },
+            num_rows="dynamic",
+            use_container_width=True,
+            hide_index=True,
+            key=f"edit_sheet_{pekerjaan_selected}"
+        )
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("### 2. Tambah Material Baru ke Pekerjaan Ini")
+        
+        with st.expander("➕ **Klik untuk menambah material baru pada pekerjaan terpilih ini**"):
+            col_e1, col_e2 = st.columns(2)
+            list_j_edit = sorted(df_master["JENIS KONSTRUKSI"].unique().tolist())
+            with col_e1:
+                j_edit = st.selectbox("Jenis Konstruksi:", list_j_edit, key="j_edit")
+                df_m_j = df_master[df_master["JENIS KONSTRUKSI"] == j_edit]
+                t_edit = st.selectbox("Type Konstruksi:", sorted(df_m_j["TYPE KONSTRUKSI"].unique().tolist()), key="t_edit")
+            
+            df_m_t = df_m_j[df_m_j["TYPE KONSTRUKSI"] == t_edit]
+            with col_e2:
+                m_edit = st.selectbox("Nama Material:", sorted(df_m_t["NAMA MATERIAL"].unique().tolist()), key="m_edit")
+                col_ev1, col_ev2, col_ev3 = st.columns(3)
+                v_mat_e = col_ev1.number_input("Vol Mat", min_value=1, value=1, step=1, key="v_mat_e")
+                v_pas_e = col_ev2.number_input("Vol Pasang", min_value=1, value=1, step=1, key="v_pas_e")
+                v_bon_e = col_ev3.number_input("Vol Bongkar", min_value=0, value=0, step=1, key="v_bon_e")
+
+            if st.button("➕ Sisipkan Material ke Pekerjaan", key="btn_insert_mat"):
+                row_baru = pd.DataFrame([{
+                    "JENIS KONSTRUKSI": j_edit,
+                    "TYPE KONSTRUKSI": t_edit,
+                    "NAMA MATERIAL": m_edit,
+                    "VOL MATERIAL": v_mat_e,
+                    "VOL PASANG": v_pas_e,
+                    "VOL BONGKAR": v_bon_e,
+                }])
+                edited_sheet_df = pd.concat([edited_sheet_df, row_baru], ignore_index=True)
+                st.success(f"Material {m_edit} berhasil disisipkan! Jangan lupa klik 'Simpan Perubahan'.")
+
+        # HITUNG ULANG HARGA & TOTAL PEKERJAAN YANG DIEDIT
+        merged_edit = pd.merge(
+            edited_sheet_df, df_master,
+            left_on=["JENIS KONSTRUKSI", "TYPE KONSTRUKSI", "NAMA MATERIAL"],
+            right_on=["JENIS KONSTRUKSI", "TYPE KONSTRUKSI", "NAMA MATERIAL"],
+            how="left"
+        )
+        
+        edited_sheet_df["Harga Satuan"] = merged_edit["HARGA MATERIAL"].fillna(0.0)
+        edited_sheet_df["Jasa Pasang Satuan"] = merged_edit["JASA PASANG"].fillna(0.0)
+        edited_sheet_df["Jasa Bongkar Satuan"] = merged_edit["JASA BONGKAR"].fillna(0.0)
+
+        edited_sheet_df["BIAYA PASANG"] = edited_sheet_df["VOL PASANG"] * edited_sheet_df["Jasa Pasang Satuan"]
+        edited_sheet_df["BIAYA BONGKAR"] = edited_sheet_df["VOL BONGKAR"] * edited_sheet_df["Jasa Bongkar Satuan"]
+
+        def hitung_mat_edit(row):
+            return 0.0 if "PLN" in str(row["NAMA MATERIAL"]).upper() else row["VOL MATERIAL"] * row["Harga Satuan"]
+
+        edited_sheet_df["HARGA MATERIAL"] = edited_sheet_df.apply(hitung_mat_edit, axis=1)
+        subtotal_edit = edited_sheet_df["HARGA MATERIAL"] + edited_sheet_df["BIAYA PASANG"] + edited_sheet_df["BIAYA BONGKAR"]
+        total_estimasi_baru = subtotal_edit.sum()
+
+        st.markdown(
+            f"""
+            <div class="total-box">
+                <div class="total-title">💰 REKAP ESTIMASI HARGA SETELAH DIEDIT</div>
+                <div class="total-amount">Rp {total_estimasi_baru:,.2f}</div>
+            </div>
+        """,
+            unsafe_allow_html=True,
+        )
+
+        # SIMPAN HASIL EDITAN KE GOOGLE SHEET
+        if st.button("💾 SIMPAN PERUBAHAN KE GOOGLE SHEETS", type="primary", use_container_width=True, key="btn_save_edit"):
+            try:
+                # Update Data Pekerjaan ini di Dataframe Utama
+                df_gsheet_sisa = df_gsheet[df_gsheet["NAMA PEKERJAAN"] != pekerjaan_selected].copy()
+
+                # Buat baris baru hasil editan
+                edited_sheet_df["NAMA PEKERJAAN"] = header_info.get("NAMA PEKERJAAN", "-")
+                edited_sheet_df["ALAMAT PEKERJAAN"] = header_info.get("ALAMAT PEKERJAAN", "-")
+                edited_sheet_df["JENIS PEKERJAAN"] = header_info.get("JENIS PEKERJAAN", "-")
+                edited_sheet_df["TANGGAL"] = str(header_info.get("TANGGAL", "-"))
+                edited_sheet_df["TOTAL ESTIMASI"] = float(total_estimasi_baru)
+
+                # Gabungkan kembali
+                df_final_all = pd.concat([df_gsheet_sisa, edited_sheet_df], ignore_index=True)
+
+                payload_update = {
+                    "action": "OVERWRITE_ALL",
+                    "payload": df_final_all.to_dict("records")
+                }
+
+                with st.spinner("Menyimpan pembaruan ke Google Sheets..."):
+                    res_update = requests.post(WEBHOOK_URL, json=payload_update, timeout=20)
+
+                if res_update.status_code == 200:
+                    st.success("✅ Data berhasil diperbarui di Google Sheets!")
+                    st.cache_data.clear()
                     st.rerun()
                 else:
-                    st.error(f"⚠️ Gagal mengirim data. Status Code: {response.status_code}")
-            except Exception as e:
-                st.error(f"⚠️ Terjadi kesalahan saat mengirim data: {e}")
+                    st.error(f"⚠️ Gagal memperbarui data. Status code: {res_update.status_code}")
+
+            except Exception as ex:
+                st.error(f"⚠️ Terjadi kesalahan saat menyimpan: {ex}")
