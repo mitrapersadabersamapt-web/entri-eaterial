@@ -402,7 +402,7 @@ with tab_entri:
                     st.error(f"⚠️ Terjadi kesalahan saat mengirim: {e}")
 
 # ==============================================================================
-# TAB 2: CARI & EDIT PEKERJAAN DIENTRI
+# TAB 2: CARI & EDIT PEKERJAAN DIENTRI (DIUBAH KE ALAMAT PEKERJAAN / KOLOM B)
 # ==============================================================================
 with tab_kelola:
     st.markdown('<div class="section-title">🔍 Cari & Kelola Pekerjaan Terdaftar</div>', unsafe_allow_html=True)
@@ -427,21 +427,23 @@ with tab_kelola:
 
     df_gsheet = fetch_sheet_data()
 
-    if df_gsheet.empty or "NAMA PEKERJAAN" not in df_gsheet.columns:
-        st.warning("⚠️ Belum ada data pekerjaan tersimpan di Google Sheets atau format kolom belum sesuai.")
+    if df_gsheet.empty or "ALAMAT PEKERJAAN" not in df_gsheet.columns:
+        st.warning("⚠️ Belum ada data pekerjaan tersimpan di Google Sheets atau kolom ALAMAT PEKERJAAN belum sesuai.")
         st.info("💡 Silakan submit minimal 1 data pekerjaan dari **Tab 1 (Entri Pekerjaan Baru)** terlebih dahulu.")
     else:
-        list_pekerjaan = [p for p in df_gsheet["NAMA PEKERJAAN"].dropna().unique().tolist() if str(p).strip() != "" and str(p).strip() != "-"]
+        # Mengambil daftar unik ALAMAT PEKERJAAN (Kolom B)
+        list_alamat = [a for a in df_gsheet["ALAMAT PEKERJAAN"].dropna().unique().tolist() if str(a).strip() != "" and str(a).strip() != "-"]
 
-        if not list_pekerjaan:
-            st.warning("⚠️ Belum ada nama pekerjaan yang tersimpan.")
+        if not list_alamat:
+            st.warning("⚠️ Belum ada Alamat Pekerjaan yang tersimpan.")
         else:
-            pekerjaan_selected = st.selectbox("🎯 Pilih Pekerjaan yang Akan Dikelola / Diedit:", list_pekerjaan)
+            alamat_selected = st.selectbox("🎯 Pilih Alamat Pekerjaan (Kolom B) yang Akan Dikelola / Diedit:", list_alamat)
 
-            df_pekerjaan_edit = df_gsheet[df_gsheet["NAMA PEKERJAAN"] == pekerjaan_selected].copy()
+            # Filter data berdasarkan ALAMAT PEKERJAAN terpilih
+            df_pekerjaan_edit = df_gsheet[df_gsheet["ALAMAT PEKERJAAN"] == alamat_selected].copy()
             header_info = df_pekerjaan_edit.iloc[0]
             
-            st.info(f"📌 **Detail Pekerjaan:** {header_info.get('NAMA PEKERJAAN', '-')} | **Jenis:** {header_info.get('JENIS PEKERJAAN', '-')} | **Alamat:** {header_info.get('ALAMAT PEKERJAAN', '-')} | **Tanggal:** {header_info.get('TANGGAL', '-')}")
+            st.info(f"📌 **Alamat Pekerjaan:** {header_info.get('ALAMAT PEKERJAAN', '-')} | **Nama Pekerjaan:** {header_info.get('NAMA PEKERJAAN', '-')} | **Jenis:** {header_info.get('JENIS PEKERJAAN', '-')} | **Tanggal:** {header_info.get('TANGGAL', '-')}")
 
             st.markdown("---")
             st.markdown("### 1. Edit Volume / Hapus Material Terdaftar")
@@ -467,7 +469,7 @@ with tab_kelola:
                 num_rows="dynamic",
                 use_container_width=True,
                 hide_index=True,
-                key=f"edit_sheet_{pekerjaan_selected}"
+                key=f"edit_sheet_{alamat_selected}"
             )
 
             st.markdown("<br>", unsafe_allow_html=True)
@@ -534,7 +536,8 @@ with tab_kelola:
 
             if st.button("💾 SIMPAN PERUBAHAN KE GOOGLE SHEETS", type="primary", use_container_width=True, key="btn_save_edit"):
                 try:
-                    df_gsheet_sisa = df_gsheet[df_gsheet["NAMA PEKERJAAN"] != pekerjaan_selected].copy()
+                    # Memisahkan data sisa (yang tidak diedit) berdasarkan ALAMAT PEKERJAAN
+                    df_gsheet_sisa = df_gsheet[df_gsheet["ALAMAT PEKERJAAN"] != alamat_selected].copy()
 
                     edited_sheet_df["NAMA PEKERJAAN"] = header_info.get("NAMA PEKERJAAN", "-")
                     edited_sheet_df["ALAMAT PEKERJAAN"] = header_info.get("ALAMAT PEKERJAAN", "-")
