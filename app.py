@@ -181,7 +181,7 @@ with col_h2:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ==========================================
-# 4. BAGIAN 2: PILIH KONSTRUKSI & CHECKBOX MATERIAL
+# 4. BAGIAN 2: PILIH MATERIAL PER KONSTRUKSI
 # ==========================================
 st.markdown('<div class="section-title">2. Pilih Material Per Konstruksi</div>', unsafe_allow_html=True)
 
@@ -199,11 +199,11 @@ with col_k2:
 
 with col_k3:
     jumlah_pemakaian = st.number_input(
-        "3. Jumlah Pemakaian Konstruksi (Set/Unit):",
+        "3. Jumlah Pemakaian (Set/Unit):",
         min_value=1,
         value=1,
         step=1,
-        help="Jumlah unit/set konstruksi ini (mengisi nilai awal jumlah material).",
+        help="Jumlah unit/set konstruksi ini yang digunakan.",
     )
 
 df_filtered = df_filtered_jenis[df_filtered_jenis["TYPE KONSTRUKSI"] == type_selected].copy()
@@ -226,7 +226,7 @@ selected_materials_editor = st.data_editor(
     key=f"editor_pilih_{jenis_selected}_{type_selected}"
 )
 
-# Tombol Tambah yang Tercentang
+# Tombol Tambah Material Per Konstruksi Tercentang
 if st.button("➕ Masukkan Material Terpilih ke Keranjang", type="primary"):
     mat_terpilih = selected_materials_editor[selected_materials_editor["Pilih"] == True]["Nama Material"].tolist()
     
@@ -235,7 +235,6 @@ if st.button("➕ Masukkan Material Terpilih ke Keranjang", type="primary"):
     else:
         jumlah_ditambah = 0
         for mat in mat_terpilih:
-            # Mengisi volume sesuai dengan jumlah pemakaian yang diinputkan tanpa perkalian berulang
             vol_mat_calc = int(jumlah_pemakaian)
             vol_pasang_calc = int(jumlah_pemakaian)
             vol_bongkar_calc = 0
@@ -251,20 +250,63 @@ if st.button("➕ Masukkan Material Terpilih ke Keranjang", type="primary"):
             st.session_state.keranjang.append(item_baru)
             jumlah_ditambah += 1
             
-        st.toast(f"✅ Berhasil menambahkan {jumlah_ditambah} material ke keranjang dengan jumlah {jumlah_pemakaian}!")
+        st.toast(f"✅ Berhasil menambahkan {jumlah_ditambah} material ke keranjang!")
         st.rerun()
 
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ==========================================
-# 5. BAGIAN 3: KERANJANG WITH REAL-TIME PRICES & EDITABLE VOLUME
+# 5. BAGIAN 3: MATERIAL TAMBAHAN
 # ==========================================
-st.markdown('<div class="section-title">3. Keranjang Input Material (Isi & Edit Volume di Sini)</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">3. Material Tambahan</div>', unsafe_allow_html=True)
+
+with st.expander("➕ **Klik di sini untuk menambah Material Tambahan di luar paket konstruksi**", expanded=False):
+    col_t1, col_t2 = st.columns(2)
+    
+    with col_t1:
+        jenis_tambahan = st.selectbox("Pilih Jenis Konstruksi (Tambahan):", list_jenis, key="jenis_tambahan")
+        df_filtered_t_jenis = df_master[df_master["JENIS KONSTRUKSI"] == jenis_tambahan]
+        list_type_tambahan = sorted(df_filtered_t_jenis["TYPE KONSTRUKSI"].unique().tolist())
+        type_tambahan = st.selectbox("Pilih Type Konstruksi (Tambahan):", list_type_tambahan, key="type_tambahan")
+        
+    df_filtered_t_type = df_filtered_t_jenis[df_filtered_t_jenis["TYPE KONSTRUKSI"] == type_tambahan]
+    list_mat_tambahan = sorted(df_filtered_t_type["NAMA MATERIAL"].unique().tolist())
+    
+    with col_t2:
+        material_tambahan = st.selectbox("Pilih / Cari Nama Material Tambahan:", list_mat_tambahan, key="mat_tambahan")
+        col_tv1, col_tv2, col_tv3 = st.columns(3)
+        with col_tv1:
+            vol_mat_t = st.number_input("Vol Material", min_value=0, value=1, step=1, key="vol_mat_t")
+        with col_tv2:
+            vol_pasang_t = st.number_input("Vol Pasang", min_value=0, value=1, step=1, key="vol_pasang_t")
+        with col_tv3:
+            vol_bongkar_t = st.number_input("Vol Bongkar", min_value=0, value=0, step=1, key="vol_bongkar_t")
+            
+    def tambah_material_tambahan():
+        item_tambahan = {
+            "Jenis Konstruksi": jenis_tambahan,
+            "Type Konstruksi": type_tambahan,
+            "Material": material_tambahan,
+            "Volume Material": int(vol_mat_t),
+            "Volume Pasang": int(vol_pasang_t),
+            "Volume Bongkar": int(vol_bongkar_t),
+        }
+        st.session_state.keranjang.append(item_tambahan)
+        st.toast("✅ Material Tambahan berhasil masuk ke keranjang!")
+
+    st.button("➕ Tambahkan Material Tambahan", on_click=tambah_material_tambahan)
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+# ==========================================
+# 6. KERANJANG MATERIAL & RINCIAN HARGA
+# ==========================================
+st.markdown('<div class="section-title">4. Keranjang Input Material (Isi & Edit Volume di Sini)</div>', unsafe_allow_html=True)
 
 if st.session_state.keranjang:
     df_cart_raw = pd.DataFrame(st.session_state.keranjang)
 
-    # 1. Hitung ulang Rincian Harga secara Real-Time berdasarkan Master Data
+    # Hitung ulang Rincian Harga secara Real-Time berdasarkan Master Data
     merged = pd.merge(
         df_cart_raw,
         df_master,
@@ -293,7 +335,7 @@ if st.session_state.keranjang:
 
     st.caption("💡 **Petunjuk:** Ubah angka volume jika diperlukan. Harga Material, Biaya Pasang/Bongkar, dan Subtotal akan otomatis menyesuaikan.")
 
-    # 2. Tampilkan Tabel Interaktif dengan Rincian Harga
+    # Tampilkan Tabel Interaktif dengan Rincian Harga
     edited_df = st.data_editor(
         df_cart_raw[[
             "Jenis Konstruksi",
@@ -334,7 +376,7 @@ if st.session_state.keranjang:
     df_hasil = edited_df
 
 else:
-    st.info("💡 Keranjang masih kosong. Silakan centang material pada daftar di atas lalu klik **➕ Masukkan Material Terpilih ke Keranjang**.")
+    st.info("💡 Keranjang masih kosong. Silakan pilih material dari Paket Konstruksi atau Material Tambahan di atas.")
     total_biaya = 0.0
     df_hasil = pd.DataFrame()
 
@@ -356,7 +398,7 @@ with col_act1:
         st.rerun()
 
 # ==========================================
-# 6. SUBMIT DATA KE GOOGLE SHEETS
+# 7. SUBMIT DATA KE GOOGLE SHEETS
 # ==========================================
 with col_act2:
     if st.button(
@@ -368,7 +410,6 @@ with col_act2:
             st.error("❌ Keranjang masih kosong! Tambahkan material terlebih dahulu.")
         else:
             try:
-                # Jika nama pekerjaan tidak diisi, berikan tanda strip (-)
                 nama_pekerjaan_kirim = nama_pekerjaan.strip() if nama_pekerjaan.strip() else "-"
                 
                 payload = []
