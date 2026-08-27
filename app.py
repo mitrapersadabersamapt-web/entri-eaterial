@@ -157,15 +157,15 @@ if st.session_state.pesan_sukses:
     st.session_state.pesan_sukses = False
 
 # ==========================================
-# 3. BAGIAN 1: HEADER PEKERJAAN
+# 3. BAGIAN 1: HEADER PEKERJAAN (OPSIONAL)
 # ==========================================
-st.markdown('<div class="section-title">1. Header Data Pekerjaan</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">1. Header Data Pekerjaan (Opsional)</div>', unsafe_allow_html=True)
 
 col_h1, col_h2 = st.columns(2)
 
 with col_h1:
     nama_pekerjaan = st.text_input(
-        "NAMA PEKERJAAN :", placeholder="Masukkan Nama Pekerjaan (misal: PERUBAHAN DAYA)"
+        "NAMA PEKERJAAN (Opsional) :", placeholder="Masukkan Nama Pekerjaan (Boleh Dikosongkan)"
     )
     alamat_pekerjaan = st.text_area(
         "ALAMAT PEKERJAAN :", placeholder="Masukkan Alamat Lengkap Pekerjaan..."
@@ -185,7 +185,7 @@ st.markdown("<br>", unsafe_allow_html=True)
 # ==========================================
 st.markdown('<div class="section-title">2. Pilih Material Per Konstruksi</div>', unsafe_allow_html=True)
 
-col_k1, col_k2 = st.columns(2)
+col_k1, col_k2, col_k3 = st.columns([1.2, 1.2, 1])
 
 with col_k1:
     list_jenis = sorted(df_master["JENIS KONSTRUKSI"].unique().tolist())
@@ -196,6 +196,15 @@ df_filtered_jenis = df_master[df_master["JENIS KONSTRUKSI"] == jenis_selected]
 with col_k2:
     list_type = sorted(df_filtered_jenis["TYPE KONSTRUKSI"].unique().tolist())
     type_selected = st.selectbox("2. Pilih Type Konstruksi:", list_type)
+
+with col_k3:
+    jumlah_pemakaian = st.number_input(
+        "3. Jumlah Pemakaian Konstruksi (Set/Unit):",
+        min_value=1,
+        value=1,
+        step=1,
+        help="Jumlah unit/set konstruksi ini (mengisi nilai awal jumlah material).",
+    )
 
 df_filtered = df_filtered_jenis[df_filtered_jenis["TYPE KONSTRUKSI"] == type_selected].copy()
 
@@ -226,19 +235,23 @@ if st.button("➕ Masukkan Material Terpilih ke Keranjang", type="primary"):
     else:
         jumlah_ditambah = 0
         for mat in mat_terpilih:
-            # Cek apakah sudah ada di keranjang untuk menghindari duplikasi berlebih
+            # Mengisi volume sesuai dengan jumlah pemakaian yang diinputkan tanpa perkalian berulang
+            vol_mat_calc = int(jumlah_pemakaian)
+            vol_pasang_calc = int(jumlah_pemakaian)
+            vol_bongkar_calc = 0
+            
             item_baru = {
                 "Jenis Konstruksi": jenis_selected,
                 "Type Konstruksi": type_selected,
                 "Material": mat,
-                "Volume Material": 1,
-                "Volume Pasang": 1,
-                "Volume Bongkar": 0,
+                "Volume Material": vol_mat_calc,
+                "Volume Pasang": vol_pasang_calc,
+                "Volume Bongkar": vol_bongkar_calc,
             }
             st.session_state.keranjang.append(item_baru)
             jumlah_ditambah += 1
             
-        st.toast(f"✅ Berhasil menambahkan {jumlah_ditambah} material ke keranjang!")
+        st.toast(f"✅ Berhasil menambahkan {jumlah_ditambah} material ke keranjang dengan jumlah {jumlah_pemakaian}!")
         st.rerun()
 
 st.markdown("<br>", unsafe_allow_html=True)
@@ -278,7 +291,7 @@ if st.session_state.keranjang:
     df_cart_raw["Harga Material"] = df_cart_raw.apply(hitung_biaya_material, axis=1)
     df_cart_raw["Subtotal"] = df_cart_raw["Harga Material"] + df_cart_raw["Biaya Pasang"] + df_cart_raw["Biaya Bongkar"]
 
-    st.caption("💡 **Petunjuk:** Ketik angka pada kolom **Vol Material**, **Vol Pasang**, dan **Vol Bongkar** untuk menyesuaikan jumlahnya. Harga akan langsung terhitung.")
+    st.caption("💡 **Petunjuk:** Ubah angka volume jika diperlukan. Harga Material, Biaya Pasang/Bongkar, dan Subtotal akan otomatis menyesuaikan.")
 
     # 2. Tampilkan Tabel Interaktif dengan Rincian Harga
     edited_df = st.data_editor(
@@ -353,14 +366,15 @@ with col_act2:
     ):
         if not st.session_state.keranjang:
             st.error("❌ Keranjang masih kosong! Tambahkan material terlebih dahulu.")
-        elif not nama_pekerjaan:
-            st.error("❌ Harap isi NAMA PEKERJAAN pada Header!")
         else:
             try:
+                # Jika nama pekerjaan tidak diisi, berikan tanda strip (-)
+                nama_pekerjaan_kirim = nama_pekerjaan.strip() if nama_pekerjaan.strip() else "-"
+                
                 payload = []
                 for item in df_hasil.to_dict("records"):
                     payload.append({
-                        "NAMA PEKERJAAN": nama_pekerjaan,
+                        "NAMA PEKERJAAN": nama_pekerjaan_kirim,
                         "ALAMAT PEKERJAAN": alamat_pekerjaan,
                         "JENIS PEKERJAAN": jenis_pekerjaan,
                         "TANGGAL": str(tanggal),
