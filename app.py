@@ -91,7 +91,7 @@ st.markdown(
 )
 
 # ==========================================
-# 3. URL GOOGLE APPS SCRIPT WEBHOOK BARU
+# 3. URL GOOGLE APPS SCRIPT WEBHOOK
 # ==========================================
 WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbxhfSRu0dYWXMGvYZrYsdgxjAUrh66f7JSkbnh5RUz-2RruKvmkXZQqJ7n1N4ywhRi7/exec"
 
@@ -253,7 +253,7 @@ with tab_entri:
                 
         def tambah_material_tambahan():
             if vol_mat_t == 0 and vol_pasang_t == 0 and vol_bongkar_t == 0:
-                st.warning("⚠️ Harap isi minimal salah satu volume lebih dari 0!")
+                st.warning("⚠️ Harap isi salah satu volume lebih dari 0!")
                 return
             
             matched = df_master[df_master["NAMA MATERIAL"] == material_tambahan]
@@ -391,6 +391,7 @@ with tab_entri:
                             allow_redirects=True
                         )
 
+                    # Diperbarui untuk mendeteksi kode respons sukses Google Sheets / Redirect 302
                     if response.status_code in [200, 201, 302]:
                         reset_seluruh_form()
                         st.session_state.pesan_sukses = True
