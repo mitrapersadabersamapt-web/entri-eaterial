@@ -124,7 +124,7 @@ except Exception:
         df_master = load_and_clean_master("MATERIAL 1_3.xlsx")
 
 # ==========================================
-# 5. INISIALISASI SESSION STATE (TERMASUK STATE INPUT)
+# 5. INISIALISASI SESSION STATE & CALLBACK
 # ==========================================
 if "keranjang" not in st.session_state:
     st.session_state.keranjang = []
@@ -143,6 +143,14 @@ if "input_jenis_pekerjaan" not in st.session_state:
 
 if "input_tanggal" not in st.session_state:
     st.session_state.input_tanggal = datetime.date.today()
+
+# Fungsi Reset Form & Keranjang Aman (Callback)
+def reset_form_entri():
+    st.session_state.input_nama_pekerjaan = ""
+    st.session_state.input_alamat_pekerjaan = ""
+    st.session_state.input_jenis_pekerjaan = "SAR"
+    st.session_state.input_tanggal = datetime.date.today()
+    st.session_state.keranjang = []
 
 # BANNER HEADER APLIKASI
 st.markdown(
@@ -366,12 +374,11 @@ with tab_entri:
                     records = df_hasil.to_dict("records")
                     
                     for idx, item in enumerate(records):
-                        # Total Estimasi hanya terisi di BARIS PERTAMA (idx == 0)
                         estimasi_val = round(float(total_biaya), 2) if idx == 0 else ""
                         
                         payload.append({
                             "NAMA PEKERJAAN": nama_pekerjaan_kirim,
-                            "ALAMAT PEKERJAAN": st.session_state.input_alamat_pekerjaan if st.session_state.input_alamat_pekerjaan.strip() else "-",
+                            "ALAMAT PEKERJAAN": st.session_state.input_alamat_pekerjaan.strip() if st.session_state.input_alamat_pekerjaan.strip() else "-",
                             "JENIS PEKERJAAN": st.session_state.input_jenis_pekerjaan,
                             "TANGGAL": str(st.session_state.input_tanggal),
                             "JENIS KONSTRUKSI": item["Jenis Konstruksi"],
@@ -390,14 +397,8 @@ with tab_entri:
                         response = requests.post(WEBHOOK_URL, data=json.dumps(payload), headers={"Content-Type": "application/json"}, timeout=20)
 
                     if response.status_code == 200:
-                        # 1. RESET FORM INPUT PEKERJAAN DAN KERANJANG
-                        st.session_state.input_nama_pekerjaan = ""
-                        st.session_state.input_alamat_pekerjaan = ""
-                        st.session_state.input_jenis_pekerjaan = "SAR"
-                        st.session_state.input_tanggal = datetime.date.today()
-                        st.session_state.keranjang = []
-                        
-                        # 2. AKTIFKAN NOTIFIKASI SUKSES
+                        # SET FLAG SUKSES DAN RESET STATE DENGAN MENGGUNAKAN CALLBACK AMAN
+                        reset_form_entri()
                         st.session_state.pesan_sukses = True
                         st.cache_data.clear()
                         st.rerun()
@@ -547,7 +548,6 @@ with tab_kelola:
                     edited_sheet_df["JENIS PEKERJAAN"] = header_info.get("JENIS PEKERJAAN", "-")
                     edited_sheet_df["TANGGAL"] = str(header_info.get("TANGGAL", "-"))
                     
-                    # Hanya isi TOTAL ESTIMASI di baris pertama saat update
                     edited_sheet_df["TOTAL ESTIMASI"] = ""
                     if not edited_sheet_df.empty:
                         edited_sheet_df.iloc[0, edited_sheet_df.columns.get_loc("TOTAL ESTIMASI")] = float(total_estimasi_baru)
