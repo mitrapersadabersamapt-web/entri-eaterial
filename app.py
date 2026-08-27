@@ -19,12 +19,9 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    /* Background Utama Bersih & Cerah */
     .stApp {
         background-color: #f4f7fa;
     }
-    
-    /* Header Banner PLN */
     .pln-header {
         background: linear-gradient(135deg, #005691 0%, #0080ff 100%);
         padding: 24px;
@@ -44,15 +41,11 @@ st.markdown(
         margin: 4px 0 0 0;
         font-weight: 600;
     }
-
-    /* Label Input Lebih Jelas & Bold */
     label, .stSelectbox label, .stTextInput label, .stNumberInput label {
         color: #1e293b !important;
         font-weight: 700 !important;
         font-size: 14px !important;
     }
-
-    /* Style Input Box */
     .stTextInput input, .stTextArea textarea, .stSelectbox > div > div, .stNumberInput input {
         background-color: #ffffff !important;
         border: 1px solid #cbd5e1 !important;
@@ -60,8 +53,6 @@ st.markdown(
         color: #0f172a !important;
         font-weight: 500 !important;
     }
-
-    /* Subheader Styling */
     .section-title {
         color: #0f172a;
         font-weight: 700;
@@ -70,8 +61,6 @@ st.markdown(
         border-bottom: 2px solid #e2e8f0;
         padding-bottom: 8px;
     }
-
-    /* Card Total Estimasi */
     .total-box {
         background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
         border: 2px solid #f59e0b;
@@ -104,7 +93,6 @@ st.markdown(
 # ==========================================
 WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbyyDW104My3hp0fnW-KLQOWyIkVBSZ4iQu1wXA9fH6Kw8P942IF1f5Hi-Tjf5lTYL-U/exec"
 
-
 # ==========================================
 # 1. LOAD & CLEANING MASTER DATABASE EXCEL
 # ==========================================
@@ -123,7 +111,6 @@ def load_and_clean_master(filepath):
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
 
     return df
-
 
 try:
     df_master = load_and_clean_master("MATERIAL 1.xlsx")
@@ -165,9 +152,6 @@ tab_entri, tab_kelola = st.tabs(["📝 Entri Pekerjaan Baru", "🔍 Cari & Edit 
 # TAB 1: ENTRI PEKERJAAN BARU
 # ==============================================================================
 with tab_entri:
-    # ------------------------------------------
-    # 1. HEADER DATA PEKERJAAN
-    # ------------------------------------------
     st.markdown('<div class="section-title">1. Header Data Pekerjaan (Opsional)</div>', unsafe_allow_html=True)
     col_h1, col_h2 = st.columns(2)
     with col_h1:
@@ -187,9 +171,6 @@ with tab_entri:
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # ------------------------------------------
-    # 2. PILIH MATERIAL PER KONSTRUKSI
-    # ------------------------------------------
     st.markdown('<div class="section-title">2. Pilih Material Per Konstruksi</div>', unsafe_allow_html=True)
     col_k1, col_k2, col_k3 = st.columns([1.2, 1.2, 1])
 
@@ -247,14 +228,9 @@ with tab_entri:
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # ------------------------------------------
-    # 3. MATERIAL TAMBAHAN (HANYA NAMA MATERIAL & DEFAULT 0)
-    # ------------------------------------------
     st.markdown('<div class="section-title">3. Material Tambahan</div>', unsafe_allow_html=True)
     with st.expander("➕ **Klik di sini untuk menambah Material Tambahan di luar paket konstruksi**", expanded=False):
-        # Ambil seluruh Nama Material unik secara alfabetis
         all_materials = sorted(df_master["NAMA MATERIAL"].unique().tolist())
-        
         material_tambahan = st.selectbox("Pilih / Cari Nama Material Tambahan:", all_materials, key="mat_tambahan")
         
         col_tv1, col_tv2, col_tv3 = st.columns(3)
@@ -267,10 +243,9 @@ with tab_entri:
                 
         def tambah_material_tambahan():
             if vol_mat_t == 0 and vol_pasang_t == 0 and vol_bongkar_t == 0:
-                st.warning("⚠️ Harap isi minimal salah satu volume (Vol Material, Vol Pasang, atau Vol Bongkar) lebih dari 0!")
+                st.warning("⚠️ Harap isi minimal salah satu volume lebih dari 0!")
                 return
             
-            # Cari Jenis & Type Konstruksi dari database master secara otomatis
             matched = df_master[df_master["NAMA MATERIAL"] == material_tambahan]
             if not matched.empty:
                 j_konst_auto = matched.iloc[0]["JENIS KONSTRUKSI"]
@@ -294,9 +269,6 @@ with tab_entri:
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # ------------------------------------------
-    # 4. KERANJANG MATERIAL & RINCIAN HARGA
-    # ------------------------------------------
     st.markdown('<div class="section-title">4. Keranjang Input Material (Isi & Edit Volume di Sini)</div>', unsafe_allow_html=True)
     if st.session_state.keranjang:
         df_cart_raw = pd.DataFrame(st.session_state.keranjang)
@@ -379,7 +351,7 @@ with tab_entri:
                     for item in df_hasil.to_dict("records"):
                         payload.append({
                             "NAMA PEKERJAAN": nama_pekerjaan_kirim,
-                            "ALAMAT PEKERJAAN": alamat_pekerjaan,
+                            "ALAMAT PEKERJAAN": alamat_pekerjaan if alamat_pekerjaan.strip() else "-",
                             "JENIS PEKERJAAN": jenis_pekerjaan,
                             "TANGGAL": str(tanggal),
                             "JENIS KONSTRUKSI": item["Jenis Konstruksi"],
@@ -395,11 +367,12 @@ with tab_entri:
                         })
 
                     with st.spinner("Sedang mengunggah data ke Google Sheets..."):
-                        response = requests.post(WEBHOOK_URL, json=payload, timeout=15)
+                        response = requests.post(WEBHOOK_URL, data=json.dumps(payload), headers={"Content-Type": "application/json"}, timeout=20)
 
                     if response.status_code == 200:
                         st.session_state.pesan_sukses = True
                         st.session_state.keranjang = []
+                        st.cache_data.clear()
                         st.rerun()
                     else:
                         st.error(f"⚠️ Gagal mengirim data. Status Code: {response.status_code}")
@@ -412,12 +385,11 @@ with tab_entri:
 with tab_kelola:
     st.markdown('<div class="section-title">🔍 Cari & Kelola Pekerjaan Terdaftar</div>', unsafe_allow_html=True)
     
-    # Ambil Data dari Google Sheets via GET Request
     if st.button("🔄 Reload / Ambil Data Terbaru dari Google Sheets", key="btn_fetch"):
         st.cache_data.clear()
         st.rerun()
     
-    @st.cache_data(ttl=60)
+    @st.cache_data(ttl=5)
     def fetch_sheet_data():
         try:
             res = requests.get(WEBHOOK_URL, timeout=15)
@@ -425,7 +397,6 @@ with tab_kelola:
                 data = res.json()
                 if isinstance(data, list) and len(data) > 0:
                     df = pd.DataFrame(data)
-                    # Clean header column names
                     df.columns = df.columns.astype(str).str.strip()
                     return df
             return pd.DataFrame()
@@ -434,12 +405,10 @@ with tab_kelola:
 
     df_gsheet = fetch_sheet_data()
 
-    # PENGECEKAN AMAN DARI KEYERROR
     if df_gsheet.empty or "NAMA PEKERJAAN" not in df_gsheet.columns:
-        st.warning("⚠️ Belum ada data pekerjaan tersimpan di Google Sheets atau kolom 'NAMA PEKERJAAN' belum ditemukan.")
+        st.warning("⚠️ Belum ada data pekerjaan tersimpan di Google Sheets atau format kolom belum sesuai.")
         st.info("💡 Silakan submit minimal 1 data pekerjaan dari **Tab 1 (Entri Pekerjaan Baru)** terlebih dahulu.")
     else:
-        # Filter nama pekerjaan yang valid
         list_pekerjaan = [p for p in df_gsheet["NAMA PEKERJAAN"].dropna().unique().tolist() if str(p).strip() != ""]
 
         if not list_pekerjaan:
@@ -448,9 +417,8 @@ with tab_kelola:
             pekerjaan_selected = st.selectbox("🎯 Pilih Pekerjaan yang Akan Dikelola / Diedit:", list_pekerjaan)
 
             df_pekerjaan_edit = df_gsheet[df_gsheet["NAMA PEKERJAAN"] == pekerjaan_selected].copy()
-            
-            # Tampilkan Ringkasan Header Pekerjaan
             header_info = df_pekerjaan_edit.iloc[0]
+            
             st.info(f"📌 **Detail Pekerjaan:** {header_info.get('NAMA PEKERJAAN', '-')} | **Jenis:** {header_info.get('JENIS PEKERJAAN', '-')} | **Alamat:** {header_info.get('ALAMAT PEKERJAAN', '-')} | **Tanggal:** {header_info.get('TANGGAL', '-')}")
 
             st.markdown("---")
@@ -461,7 +429,6 @@ with tab_kelola:
                 if c in df_pekerjaan_edit.columns:
                     df_pekerjaan_edit[c] = pd.to_numeric(df_pekerjaan_edit[c], errors="coerce").fillna(0)
 
-            # Editor Tabel Material Terdaftar
             edited_sheet_df = st.data_editor(
                 df_pekerjaan_edit[[
                     "JENIS KONSTRUKSI", "TYPE KONSTRUKSI", "NAMA MATERIAL",
@@ -512,7 +479,6 @@ with tab_kelola:
                     edited_sheet_df = pd.concat([edited_sheet_df, row_baru], ignore_index=True)
                     st.success(f"Material '{m_edit}' berhasil disisipkan! Jangan lupa klik tombol Simpan di bawah.")
 
-            # REKALKULASI BIAYA SECARA REAL-TIME DARI MASTER DATA
             merged_edit = pd.merge(
                 edited_sheet_df, df_master,
                 left_on=["JENIS KONSTRUKSI", "TYPE KONSTRUKSI", "NAMA MATERIAL"],
@@ -544,7 +510,6 @@ with tab_kelola:
                 unsafe_allow_html=True,
             )
 
-            # PROSES SIMPAN KEMBALI KE GOOGLE SHEET
             if st.button("💾 SIMPAN PERUBAHAN KE GOOGLE SHEETS", type="primary", use_container_width=True, key="btn_save_edit"):
                 try:
                     df_gsheet_sisa = df_gsheet[df_gsheet["NAMA PEKERJAAN"] != pekerjaan_selected].copy()
@@ -563,7 +528,7 @@ with tab_kelola:
                     }
 
                     with st.spinner("Menyimpan pembaruan ke Google Sheets..."):
-                        res_update = requests.post(WEBHOOK_URL, json=payload_update, timeout=20)
+                        res_update = requests.post(WEBHOOK_URL, data=json.dumps(payload_update), headers={"Content-Type": "application/json"}, timeout=20)
 
                     if res_update.status_code == 200:
                         st.success("✅ Data berhasil diperbarui di Google Sheets!")
