@@ -123,7 +123,7 @@ except Exception:
         df_master = load_and_clean_master("MATERIAL 1_3.xlsx")
 
 # ==========================================
-# 5. INISIALISASI SESSION STATE & CALLBACK AMAN
+# 5. INISIALISASI SESSION STATE
 # ==========================================
 if "keranjang" not in st.session_state:
     st.session_state.keranjang = []
@@ -402,7 +402,7 @@ with tab_entri:
                     st.error(f"⚠️ Terjadi kesalahan saat mengirim: {e}")
 
 # ==============================================================================
-# TAB 2: CARI & EDIT PEKERJAAN DIENTRI (DIUBAH KE ALAMAT PEKERJAAN / KOLOM B)
+# TAB 2: CARI & EDIT PEKERJAAN DIENTRI (DENGAN REFRESH AUTO & DETEKSI KOLOM LENTUR)
 # ==============================================================================
 with tab_kelola:
     st.markdown('<div class="section-title">🔍 Cari & Kelola Pekerjaan Terdaftar</div>', unsafe_allow_html=True)
@@ -411,7 +411,7 @@ with tab_kelola:
         st.cache_data.clear()
         st.rerun()
     
-    @st.cache_data(ttl=5)
+    # Fungsi pembaca data Sheets dengan auto-cleaning header
     def fetch_sheet_data():
         try:
             res = requests.get(WEBHOOK_URL, timeout=15)
@@ -419,157 +419,179 @@ with tab_kelola:
                 data = res.json()
                 if isinstance(data, list) and len(data) > 0:
                     df = pd.DataFrame(data)
-                    df.columns = df.columns.astype(str).str.strip()
-                    return df
-            return pd.DataFrame()
-        except Exception:
-            return pd.DataFrame()
+                    # Normalisasi Nama Kolom (Uppercase dan hapus spasi samping)
+                    df.columns = [str(c).strip().upper() for c in df.columns]
+                    return df, None
+                else:
+                    return pd.DataFrame(), "Data dari Google Sheets masih kosong."
+            else:
+                return pd.DataFrame(), f"Gagal akses Webhook. HTTP Status: {res.status_code}"
+        except Exception as e:
+            return pd.DataFrame(), f"Terjadi Error Koneksi: {str(e)}"
 
-    df_gsheet = fetch_sheet_data()
+    df_gsheet, err_msg = fetch_sheet_data()
 
-    if df_gsheet.empty or "ALAMAT PEKERJAAN" not in df_gsheet.columns:
-        st.warning("⚠️ Belum ada data pekerjaan tersimpan di Google Sheets atau kolom ALAMAT PEKERJAAN belum sesuai.")
+    if df_gsheet.empty:
+        st.warning(f"⚠️ {err_msg if err_msg else 'Belum ada data pekerjaan tersimpan di Google Sheets.'}")
         st.info("💡 Silakan submit minimal 1 data pekerjaan dari **Tab 1 (Entri Pekerjaan Baru)** terlebih dahulu.")
     else:
-        # Mengambil daftar unik ALAMAT PEKERJAAN (Kolom B)
-        list_alamat = [a for a in df_gsheet["ALAMAT PEKERJAAN"].dropna().unique().tolist() if str(a).strip() != "" and str(a).strip() != "-"]
+        # Cari nama kolom Alamat secara fleksibel
+        col_alamat = None
+        for candidate in ["ALAMAT PEKERJAAN", "ALAMAT", "ALAMAT_PEKERJAAN", "NAMA PEKERJAAN"]:
+            if candidate in df_gsheet.columns:
+                col_alamat = candidate
+                break
 
-        if not list_alamat:
-            st.warning("⚠️ Belum ada Alamat Pekerjaan yang tersimpan.")
+        if col_alamat is None:
+            st.error(f"⚠️ Kolom alamat tidak ditemukan di Google Sheets. Kolom yang terbaca: {list(df_gsheet.columns)}")
         else:
-            alamat_selected = st.selectbox("🎯 Pilih Alamat Pekerjaan (Kolom B) yang Akan Dikelola / Diedit:", list_alamat)
+            list_alamat = [a for a in df_gsheet[col_alamat].dropna().unique().tolist() if str(a).strip() not in ["", "-"]]
 
-            # Filter data berdasarkan ALAMAT PEKERJAAN terpilih
-            df_pekerjaan_edit = df_gsheet[df_gsheet["ALAMAT PEKERJAAN"] == alamat_selected].copy()
-            header_info = df_pekerjaan_edit.iloc[0]
-            
-            st.info(f"📌 **Alamat Pekerjaan:** {header_info.get('ALAMAT PEKERJAAN', '-')} | **Nama Pekerjaan:** {header_info.get('NAMA PEKERJAAN', '-')} | **Jenis:** {header_info.get('JENIS PEKERJAAN', '-')} | **Tanggal:** {header_info.get('TANGGAL', '-')}")
+            if not list_alamat:
+                st.warning("⚠️ Data di Google Sheets ada, tetapi isi kolom Alamat Pekerjaan masih kosong/strip.")
+            else:
+                alamat_selected = st.selectbox(
+                    f"🎯 Pilih Pekerjaan Berdasarkan ({col_alamat}):", 
+                    list_alamat,
+                    key="sb_alamat_edit"
+                )
 
-            st.markdown("---")
-            st.markdown("### 1. Edit Volume / Hapus Material Terdaftar")
-            
-            cols_num = ["VOL MATERIAL", "VOL PASANG", "VOL BONGKAR", "HARGA MATERIAL", "BIAYA PASANG", "BIAYA BONGKAR"]
-            for c in cols_num:
-                if c in df_pekerjaan_edit.columns:
-                    df_pekerjaan_edit[c] = pd.to_numeric(df_pekerjaan_edit[c], errors="coerce").fillna(0)
-
-            edited_sheet_df = st.data_editor(
-                df_pekerjaan_edit[[
-                    "JENIS KONSTRUKSI", "TYPE KONSTRUKSI", "NAMA MATERIAL",
-                    "VOL MATERIAL", "VOL PASANG", "VOL BONGKAR"
-                ]],
-                column_config={
-                    "JENIS KONSTRUKSI": st.column_config.TextColumn("Jenis Konstruksi", disabled=True),
-                    "TYPE KONSTRUKSI": st.column_config.TextColumn("Type Konstruksi", disabled=True),
-                    "NAMA MATERIAL": st.column_config.TextColumn("Nama Material", disabled=True),
-                    "VOL MATERIAL": st.column_config.NumberColumn("Vol Material", min_value=0, step=1),
-                    "VOL PASANG": st.column_config.NumberColumn("Vol Pasang", min_value=0, step=1),
-                    "VOL BONGKAR": st.column_config.NumberColumn("Vol Bongkar", min_value=0, step=1),
-                },
-                num_rows="dynamic",
-                use_container_width=True,
-                hide_index=True,
-                key=f"edit_sheet_{alamat_selected}"
-            )
-
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.markdown("### 2. Tambah Material Baru ke Pekerjaan Ini")
-            
-            with st.expander("➕ **Klik untuk menambah material baru pada pekerjaan terpilih ini**"):
-                col_e1, col_e2 = st.columns(2)
-                list_j_edit = sorted(df_master["JENIS KONSTRUKSI"].unique().tolist())
-                with col_e1:
-                    j_edit = st.selectbox("Jenis Konstruksi:", list_j_edit, key="j_edit")
-                    df_m_j = df_master[df_master["JENIS KONSTRUKSI"] == j_edit]
-                    t_edit = st.selectbox("Type Konstruksi:", sorted(df_m_j["TYPE KONSTRUKSI"].unique().tolist()), key="t_edit")
+                # Filter data berdasarkan alamat yang dipilih
+                df_pekerjaan_edit = df_gsheet[df_gsheet[col_alamat] == alamat_selected].copy()
+                header_info = df_pekerjaan_edit.iloc[0]
                 
-                df_m_t = df_m_j[df_m_j["TYPE KONSTRUKSI"] == t_edit]
-                with col_e2:
-                    m_edit = st.selectbox("Nama Material:", sorted(df_m_t["NAMA MATERIAL"].unique().tolist()), key="m_edit")
-                    col_ev1, col_ev2, col_ev3 = st.columns(3)
-                    v_mat_e = col_ev1.number_input("Vol Mat", min_value=0, value=0, step=1, key="v_mat_e")
-                    v_pas_e = col_ev2.number_input("Vol Pasang", min_value=0, value=0, step=1, key="v_pas_e")
-                    v_bon_e = col_ev3.number_input("Vol Bongkar", min_value=0, value=0, step=1, key="v_bon_e")
+                nama_p = header_info.get('NAMA PEKERJAAN', header_info.get(col_alamat, '-'))
+                jenis_p = header_info.get('JENIS PEKERJAAN', '-')
+                tgl_p = header_info.get('TANGGAL', '-')
 
-                if st.button("➕ Sisipkan Material ke Pekerjaan", key="btn_insert_mat"):
-                    row_baru = pd.DataFrame([{
-                        "JENIS KONSTRUKSI": j_edit,
-                        "TYPE KONSTRUKSI": t_edit,
-                        "NAMA MATERIAL": m_edit,
-                        "VOL MATERIAL": v_mat_e,
-                        "VOL PASANG": v_pas_e,
-                        "VOL BONGKAR": v_bon_e,
-                    }])
-                    edited_sheet_df = pd.concat([edited_sheet_df, row_baru], ignore_index=True)
-                    st.success(f"Material '{m_edit}' berhasil disisipkan! Jangan lupa klik tombol Simpan di bawah.")
+                st.info(f"📌 **Lokasi/Alamat:** {alamat_selected} | **Nama Pekerjaan:** {nama_p} | **Jenis:** {jenis_p} | **Tanggal:** {tgl_p}")
 
-            merged_edit = pd.merge(
-                edited_sheet_df, df_master,
-                left_on=["JENIS KONSTRUKSI", "TYPE KONSTRUKSI", "NAMA MATERIAL"],
-                right_on=["JENIS KONSTRUKSI", "TYPE KONSTRUKSI", "NAMA MATERIAL"],
-                how="left"
-            )
-            
-            edited_sheet_df["Harga Satuan"] = merged_edit["HARGA MATERIAL"].fillna(0.0)
-            edited_sheet_df["Jasa Pasang Satuan"] = merged_edit["JASA PASANG"].fillna(0.0)
-            edited_sheet_df["Jasa Bongkar Satuan"] = merged_edit["JASA BONGKAR"].fillna(0.0)
+                st.markdown("---")
+                st.markdown("### 1. Edit Volume / Hapus Material Terdaftar")
+                
+                # Pastikan kolom-kolom utama ada di dataframe
+                req_cols = ["JENIS KONSTRUKSI", "TYPE KONSTRUKSI", "NAMA MATERIAL", "VOL MATERIAL", "VOL PASANG", "VOL BONGKAR"]
+                for rc in req_cols:
+                    if rc not in df_pekerjaan_edit.columns:
+                        df_pekerjaan_edit[rc] = 0 if "VOL" in rc else "-"
 
-            edited_sheet_df["BIAYA PASANG"] = edited_sheet_df["VOL PASANG"] * edited_sheet_df["Jasa Pasang Satuan"]
-            edited_sheet_df["BIAYA BONGKAR"] = edited_sheet_df["VOL BONGKAR"] * edited_sheet_df["Jasa Bongkar Satuan"]
+                cols_num = ["VOL MATERIAL", "VOL PASANG", "VOL BONGKAR"]
+                for c in cols_num:
+                    df_pekerjaan_edit[c] = pd.to_numeric(df_pekerjaan_edit[c], errors="coerce").fillna(0).astype(int)
 
-            def hitung_mat_edit(row):
-                return 0.0 if "PLN" in str(row["NAMA MATERIAL"]).upper() else row["VOL MATERIAL"] * row["Harga Satuan"]
+                edited_sheet_df = st.data_editor(
+                    df_pekerjaan_edit[req_cols],
+                    column_config={
+                        "JENIS KONSTRUKSI": st.column_config.TextColumn("Jenis Konstruksi", disabled=True),
+                        "TYPE KONSTRUKSI": st.column_config.TextColumn("Type Konstruksi", disabled=True),
+                        "NAMA MATERIAL": st.column_config.TextColumn("Nama Material", disabled=True),
+                        "VOL MATERIAL": st.column_config.NumberColumn("Vol Material", min_value=0, step=1),
+                        "VOL PASANG": st.column_config.NumberColumn("Vol Pasang", min_value=0, step=1),
+                        "VOL BONGKAR": st.column_config.NumberColumn("Vol Bongkar", min_value=0, step=1),
+                    },
+                    num_rows="dynamic",
+                    use_container_width=True,
+                    hide_index=True,
+                    key=f"edit_sheet_{alamat_selected}"
+                )
 
-            edited_sheet_df["HARGA MATERIAL"] = edited_sheet_df.apply(hitung_mat_edit, axis=1)
-            subtotal_edit = edited_sheet_df["HARGA MATERIAL"] + edited_sheet_df["BIAYA PASANG"] + edited_sheet_df["BIAYA BONGKAR"]
-            total_estimasi_baru = subtotal_edit.sum()
-
-            st.markdown(
-                f"""
-                <div class="total-box">
-                    <div class="total-title">💰 REKAP ESTIMASI HARGA SETELAH DIEDIT</div>
-                    <div class="total-amount">Rp {total_estimasi_baru:,.2f}</div>
-                </div>
-            """,
-                unsafe_allow_html=True,
-            )
-
-            if st.button("💾 SIMPAN PERUBAHAN KE GOOGLE SHEETS", type="primary", use_container_width=True, key="btn_save_edit"):
-                try:
-                    # Memisahkan data sisa (yang tidak diedit) berdasarkan ALAMAT PEKERJAAN
-                    df_gsheet_sisa = df_gsheet[df_gsheet["ALAMAT PEKERJAAN"] != alamat_selected].copy()
-
-                    edited_sheet_df["NAMA PEKERJAAN"] = header_info.get("NAMA PEKERJAAN", "-")
-                    edited_sheet_df["ALAMAT PEKERJAAN"] = header_info.get("ALAMAT PEKERJAAN", "-")
-                    edited_sheet_df["JENIS PEKERJAAN"] = header_info.get("JENIS PEKERJAAN", "-")
-                    edited_sheet_df["TANGGAL"] = str(header_info.get("TANGGAL", "-"))
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown("### 2. Tambah Material Baru ke Pekerjaan Ini")
+                
+                with st.expander("➕ **Klik untuk menambah material baru pada pekerjaan terpilih ini**"):
+                    col_e1, col_e2 = st.columns(2)
+                    list_j_edit = sorted(df_master["JENIS KONSTRUKSI"].unique().tolist())
+                    with col_e1:
+                        j_edit = st.selectbox("Jenis Konstruksi:", list_j_edit, key="j_edit")
+                        df_m_j = df_master[df_master["JENIS KONSTRUKSI"] == j_edit]
+                        t_edit = st.selectbox("Type Konstruksi:", sorted(df_m_j["TYPE KONSTRUKSI"].unique().tolist()), key="t_edit")
                     
-                    edited_sheet_df["TOTAL ESTIMASI"] = ""
-                    if not edited_sheet_df.empty:
-                        edited_sheet_df.iloc[0, edited_sheet_df.columns.get_loc("TOTAL ESTIMASI")] = float(total_estimasi_baru)
+                    df_m_t = df_m_j[df_m_j["TYPE KONSTRUKSI"] == t_edit]
+                    with col_e2:
+                        m_edit = st.selectbox("Nama Material:", sorted(df_m_t["NAMA MATERIAL"].unique().tolist()), key="m_edit")
+                        col_ev1, col_ev2, col_ev3 = st.columns(3)
+                        v_mat_e = col_ev1.number_input("Vol Mat", min_value=0, value=0, step=1, key="v_mat_e")
+                        v_pas_e = col_ev2.number_input("Vol Pasang", min_value=0, value=0, step=1, key="v_pas_e")
+                        v_bon_e = col_ev3.number_input("Vol Bongkar", min_value=0, value=0, step=1, key="v_bon_e")
 
-                    df_final_all = pd.concat([df_gsheet_sisa, edited_sheet_df], ignore_index=True)
+                    if st.button("➕ Sisipkan Material ke Pekerjaan", key="btn_insert_mat"):
+                        row_baru = pd.DataFrame([{
+                            "JENIS KONSTRUKSI": j_edit,
+                            "TYPE KONSTRUKSI": t_edit,
+                            "NAMA MATERIAL": m_edit,
+                            "VOL MATERIAL": v_mat_e,
+                            "VOL PASANG": v_pas_e,
+                            "VOL BONGKAR": v_bon_e,
+                        }])
+                        edited_sheet_df = pd.concat([edited_sheet_df, row_baru], ignore_index=True)
+                        st.success(f"Material '{m_edit}' berhasil disisipkan! Klik tombol Simpan di bawah.")
 
-                    payload_update = {
-                        "action": "OVERWRITE_ALL",
-                        "payload": df_final_all.to_dict("records")
-                    }
+                merged_edit = pd.merge(
+                    edited_sheet_df, df_master,
+                    left_on=["JENIS KONSTRUKSI", "TYPE KONSTRUKSI", "NAMA MATERIAL"],
+                    right_on=["JENIS KONSTRUKSI", "TYPE KONSTRUKSI", "NAMA MATERIAL"],
+                    how="left"
+                )
+                
+                edited_sheet_df["Harga Satuan"] = merged_edit["HARGA MATERIAL"].fillna(0.0)
+                edited_sheet_df["Jasa Pasang Satuan"] = merged_edit["JASA PASANG"].fillna(0.0)
+                edited_sheet_df["Jasa Bongkar Satuan"] = merged_edit["JASA BONGKAR"].fillna(0.0)
 
-                    with st.spinner("Menyimpan pembaruan ke Google Sheets..."):
-                        res_update = requests.post(
-                            WEBHOOK_URL, 
-                            data=json.dumps(payload_update), 
-                            headers={"Content-Type": "application/json"}, 
-                            timeout=25,
-                            allow_redirects=True
-                        )
+                edited_sheet_df["BIAYA PASANG"] = edited_sheet_df["VOL PASANG"] * edited_sheet_df["Jasa Pasang Satuan"]
+                edited_sheet_df["BIAYA BONGKAR"] = edited_sheet_df["VOL BONGKAR"] * edited_sheet_df["Jasa Bongkar Satuan"]
 
-                    if res_update.status_code in [200, 201, 302]:
-                        st.success("✅ Data berhasil diperbarui di Google Sheets!")
-                        st.cache_data.clear()
-                        st.rerun()
-                    else:
-                        st.error(f"⚠️ Gagal memperbarui data. Status code: {res_update.status_code}")
+                def hitung_mat_edit(row):
+                    return 0.0 if "PLN" in str(row["NAMA MATERIAL"]).upper() else row["VOL MATERIAL"] * row["Harga Satuan"]
 
-                except Exception as ex:
-                    st.error(f"⚠️ Terjadi kesalahan saat menyimpan: {ex}")
+                edited_sheet_df["HARGA MATERIAL"] = edited_sheet_df.apply(hitung_mat_edit, axis=1)
+                subtotal_edit = edited_sheet_df["HARGA MATERIAL"] + edited_sheet_df["BIAYA PASANG"] + edited_sheet_df["BIAYA BONGKAR"]
+                total_estimasi_baru = subtotal_edit.sum()
+
+                st.markdown(
+                    f"""
+                    <div class="total-box">
+                        <div class="total-title">💰 REKAP ESTIMASI HARGA SETELAH DIEDIT</div>
+                        <div class="total-amount">Rp {total_estimasi_baru:,.2f}</div>
+                    </div>
+                """,
+                    unsafe_allow_html=True,
+                )
+
+                if st.button("💾 SIMPAN PERUBAHAN KE GOOGLE SHEETS", type="primary", use_container_width=True, key="btn_save_edit"):
+                    try:
+                        df_gsheet_sisa = df_gsheet[df_gsheet[col_alamat] != alamat_selected].copy()
+
+                        edited_sheet_df["NAMA PEKERJAAN"] = header_info.get("NAMA PEKERJAAN", "-")
+                        edited_sheet_df["ALAMAT PEKERJAAN"] = alamat_selected
+                        edited_sheet_df["JENIS PEKERJAAN"] = header_info.get("JENIS PEKERJAAN", "-")
+                        edited_sheet_df["TANGGAL"] = str(header_info.get("TANGGAL", "-"))
+                        
+                        edited_sheet_df["TOTAL ESTIMASI"] = ""
+                        if not edited_sheet_df.empty:
+                            edited_sheet_df.iloc[0, edited_sheet_df.columns.get_loc("TOTAL ESTIMASI")] = float(total_estimasi_baru)
+
+                        df_final_all = pd.concat([df_gsheet_sisa, edited_sheet_df], ignore_index=True)
+
+                        payload_update = {
+                            "action": "OVERWRITE_ALL",
+                            "payload": df_final_all.to_dict("records")
+                        }
+
+                        with st.spinner("Menyimpan pembaruan ke Google Sheets..."):
+                            res_update = requests.post(
+                                WEBHOOK_URL, 
+                                data=json.dumps(payload_update), 
+                                headers={"Content-Type": "application/json"}, 
+                                timeout=25,
+                                allow_redirects=True
+                            )
+
+                        if res_update.status_code in [200, 201, 302]:
+                            st.success("✅ Data berhasil diperbarui di Google Sheets!")
+                            st.cache_data.clear()
+                            st.rerun()
+                        else:
+                            st.error(f"⚠️ Gagal memperbarui data. Status code: {res_update.status_code}")
+
+                    except Exception as ex:
+                        st.error(f"⚠️ Terjadi kesalahan saat menyimpan: {ex}")
