@@ -1,4 +1,5 @@
 import json
+import datetime
 import pandas as pd
 import requests
 import streamlit as st
@@ -64,7 +65,7 @@ st.markdown(
     /* STYLING KOTAK MERAH TOTAL ESTIMASI */
     .total-box {
         background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
-        border: 2px solid #dc2626 !important; /* KOTAK MERAH TEBAL */
+        border: 2px solid #dc2626 !important;
         padding: 18px 24px;
         border-radius: 12px;
         text-align: left;
@@ -123,13 +124,25 @@ except Exception:
         df_master = load_and_clean_master("MATERIAL 1_3.xlsx")
 
 # ==========================================
-# 5. INISIALISASI SESSION STATE
+# 5. INISIALISASI SESSION STATE (TERMASUK STATE INPUT)
 # ==========================================
 if "keranjang" not in st.session_state:
     st.session_state.keranjang = []
 
 if "pesan_sukses" not in st.session_state:
     st.session_state.pesan_sukses = False
+
+if "input_nama_pekerjaan" not in st.session_state:
+    st.session_state.input_nama_pekerjaan = ""
+
+if "input_alamat_pekerjaan" not in st.session_state:
+    st.session_state.input_alamat_pekerjaan = ""
+
+if "input_jenis_pekerjaan" not in st.session_state:
+    st.session_state.input_jenis_pekerjaan = "SAR"
+
+if "input_tanggal" not in st.session_state:
+    st.session_state.input_tanggal = datetime.date.today()
 
 # BANNER HEADER APLIKASI
 st.markdown(
@@ -142,8 +155,9 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# NOTIFIKASI BERHASIL
 if st.session_state.pesan_sukses:
-    st.success("🎉 **SELAMAT! DATA BERHASIL DISIMPAN KE GOOGLE SHEET**")
+    st.success("🎉 **DATA BERHASIL DISIMPAN KE GOOGLE SHEETS! FORM PEKERJAAN & KERANJANG TELAH DI-RESET.**")
     st.balloons()
     st.session_state.pesan_sukses = False
 
@@ -158,18 +172,22 @@ with tab_entri:
     col_h1, col_h2 = st.columns(2)
     with col_h1:
         nama_pekerjaan = st.text_input(
-            "NAMA PEKERJAAN (Opsional) :", placeholder="Masukkan Nama Pekerjaan (Boleh Dikosongkan)", key="entri_nama"
+            "NAMA PEKERJAAN (Opsional) :",
+            placeholder="Masukkan Nama Pekerjaan (Boleh Dikosongkan)",
+            key="input_nama_pekerjaan"
         )
         alamat_pekerjaan = st.text_area(
-            "ALAMAT PEKERJAAN :", placeholder="Masukkan Alamat Lengkap Pekerjaan...", key="entri_alamat"
+            "ALAMAT PEKERJAAN :",
+            placeholder="Masukkan Alamat Lengkap Pekerjaan...",
+            key="input_alamat_pekerjaan"
         )
     with col_h2:
         jenis_pekerjaan = st.selectbox(
             "JENIS PEKERJAAN :",
             ["SAR", "PFK", "PREVENTIF", "KEYPOINT", "PEMELIHARAAN JARINGAN"],
-            key="entri_jenis"
+            key="input_jenis_pekerjaan"
         )
-        tanggal = st.date_input("TANGGAL :", key="entri_tgl")
+        tanggal = st.date_input("TANGGAL :", key="input_tanggal")
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -343,7 +361,7 @@ with tab_entri:
                 st.error("❌ Keranjang masih kosong!")
             else:
                 try:
-                    nama_pekerjaan_kirim = nama_pekerjaan.strip() if nama_pekerjaan.strip() else "-"
+                    nama_pekerjaan_kirim = st.session_state.input_nama_pekerjaan.strip() if st.session_state.input_nama_pekerjaan.strip() else "-"
                     payload = []
                     records = df_hasil.to_dict("records")
                     
@@ -353,9 +371,9 @@ with tab_entri:
                         
                         payload.append({
                             "NAMA PEKERJAAN": nama_pekerjaan_kirim,
-                            "ALAMAT PEKERJAAN": alamat_pekerjaan if alamat_pekerjaan.strip() else "-",
-                            "JENIS PEKERJAAN": jenis_pekerjaan,
-                            "TANGGAL": str(tanggal),
+                            "ALAMAT PEKERJAAN": st.session_state.input_alamat_pekerjaan if st.session_state.input_alamat_pekerjaan.strip() else "-",
+                            "JENIS PEKERJAAN": st.session_state.input_jenis_pekerjaan,
+                            "TANGGAL": str(st.session_state.input_tanggal),
                             "JENIS KONSTRUKSI": item["Jenis Konstruksi"],
                             "TYPE KONSTRUKSI": item["Type Konstruksi"],
                             "NAMA MATERIAL": item["Material"],
@@ -372,8 +390,15 @@ with tab_entri:
                         response = requests.post(WEBHOOK_URL, data=json.dumps(payload), headers={"Content-Type": "application/json"}, timeout=20)
 
                     if response.status_code == 200:
-                        st.session_state.pesan_sukses = True
+                        # 1. RESET FORM INPUT PEKERJAAN DAN KERANJANG
+                        st.session_state.input_nama_pekerjaan = ""
+                        st.session_state.input_alamat_pekerjaan = ""
+                        st.session_state.input_jenis_pekerjaan = "SAR"
+                        st.session_state.input_tanggal = datetime.date.today()
                         st.session_state.keranjang = []
+                        
+                        # 2. AKTIFKAN NOTIFIKASI SUKSES
+                        st.session_state.pesan_sukses = True
                         st.cache_data.clear()
                         st.rerun()
                     else:
