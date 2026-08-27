@@ -4,7 +4,7 @@ import requests
 import streamlit as st
 
 # ==========================================
-# KONFIGURASI HALAMAN
+# 1. KONFIGURASI HALAMAN STREAMLIT
 # ==========================================
 st.set_page_config(
     page_title="Sistem Entri Material PLN",
@@ -14,7 +14,7 @@ st.set_page_config(
 )
 
 # ==========================================
-# CUSTOM CSS UNTUK TAMPILAN CERAH & KONTRAS
+# 2. CUSTOM CSS UNTUK TAMPILAN CERAH & KOTAK MERAH
 # ==========================================
 st.markdown(
     """
@@ -61,9 +61,10 @@ st.markdown(
         border-bottom: 2px solid #e2e8f0;
         padding-bottom: 8px;
     }
+    /* STYLING KOTAK MERAH TOTAL ESTIMASI */
     .total-box {
         background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
-        border: 2px solid #dc2626; /* KOTAK MERAH */
+        border: 2px solid #dc2626 !important; /* KOTAK MERAH TEBAL */
         padding: 18px 24px;
         border-radius: 12px;
         text-align: left;
@@ -90,12 +91,12 @@ st.markdown(
 )
 
 # ==========================================
-# URL GOOGLE APPS SCRIPT WEBHOOK ANDA
+# 3. URL GOOGLE APPS SCRIPT WEBHOOK
 # ==========================================
 WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbyyDW104My3hp0fnW-KLQOWyIkVBSZ4iQu1wXA9fH6Kw8P942IF1f5Hi-Tjf5lTYL-U/exec"
 
 # ==========================================
-# 1. LOAD & CLEANING MASTER DATABASE EXCEL
+# 4. LOAD & CLEANING MASTER DATABASE EXCEL
 # ==========================================
 @st.cache_data
 def load_and_clean_master(filepath):
@@ -122,7 +123,7 @@ except Exception:
         df_master = load_and_clean_master("MATERIAL 1_3.xlsx")
 
 # ==========================================
-# 2. SESSION STATE MANAGEMENT
+# 5. INISIALISASI SESSION STATE
 # ==========================================
 if "keranjang" not in st.session_state:
     st.session_state.keranjang = []
@@ -130,7 +131,7 @@ if "keranjang" not in st.session_state:
 if "pesan_sukses" not in st.session_state:
     st.session_state.pesan_sukses = False
 
-# BANNER HEADER APPS
+# BANNER HEADER APLIKASI
 st.markdown(
     """
     <div class="pln-header">
@@ -146,7 +147,7 @@ if st.session_state.pesan_sukses:
     st.balloons()
     st.session_state.pesan_sukses = False
 
-# NAVIGASI TAB UTAMA
+# TAB UTAMA
 tab_entri, tab_kelola = st.tabs(["📝 Entri Pekerjaan Baru", "🔍 Cari & Edit Pekerjaan Dientri"])
 
 # ==============================================================================
@@ -319,7 +320,7 @@ with tab_entri:
         total_biaya = 0.0
         df_hasil = pd.DataFrame()
 
-    # BOX TOTAL ESTIMASI DENGAN KOTAK MERAH
+    # KOTAK TOTAL ESTIMASI BINGKAI MERAH
     st.markdown(
         f"""
         <div class="total-box">
@@ -347,7 +348,7 @@ with tab_entri:
                     records = df_hasil.to_dict("records")
                     
                     for idx, item in enumerate(records):
-                        # Total Estimasi hanya diisi angka pada baris pertama (idx == 0)
+                        # Total Estimasi hanya terisi di BARIS PERTAMA (idx == 0)
                         estimasi_val = round(float(total_biaya), 2) if idx == 0 else ""
                         
                         payload.append({
@@ -501,7 +502,7 @@ with tab_kelola:
             subtotal_edit = edited_sheet_df["HARGA MATERIAL"] + edited_sheet_df["BIAYA PASANG"] + edited_sheet_df["BIAYA BONGKAR"]
             total_estimasi_baru = subtotal_edit.sum()
 
-            # BOX TOTAL ESTIMASI DENGAN KOTAK MERAH
+            # KOTAK TOTAL ESTIMASI BINGKAI MERAH UNTUK MENU EDIT
             st.markdown(
                 f"""
                 <div class="total-box">
@@ -521,7 +522,7 @@ with tab_kelola:
                     edited_sheet_df["JENIS PEKERJAAN"] = header_info.get("JENIS PEKERJAAN", "-")
                     edited_sheet_df["TANGGAL"] = str(header_info.get("TANGGAL", "-"))
                     
-                    # Isi TOTAL ESTIMASI hanya di baris pertama
+                    # Hanya isi TOTAL ESTIMASI di baris pertama saat update
                     edited_sheet_df["TOTAL ESTIMASI"] = ""
                     if not edited_sheet_df.empty:
                         edited_sheet_df.iloc[0, edited_sheet_df.columns.get_loc("TOTAL ESTIMASI")] = float(total_estimasi_baru)
