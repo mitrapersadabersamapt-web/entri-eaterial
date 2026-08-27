@@ -91,9 +91,9 @@ st.markdown(
 )
 
 # ==========================================
-# 3. URL GOOGLE APPS SCRIPT WEBHOOK
+# 3. URL GOOGLE APPS SCRIPT WEBHOOK BARU
 # ==========================================
-WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbyyDW104My3hp0fnW-KLQOWyIkVBSZ4iQu1wXA9fH6Kw8P942IF1f5Hi-Tjf5lTYL-U/exec"
+WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbxhfSRu0dYWXMGvYZrYsdgxjAUrh66f7JSkbnh5RUz-2RruKvmkXZQqJ7n1N4ywhRi7/exec"
 
 # ==========================================
 # 4. LOAD & CLEANING MASTER DATABASE EXCEL
@@ -131,7 +131,6 @@ if "keranjang" not in st.session_state:
 if "pesan_sukses" not in st.session_state:
     st.session_state.pesan_sukses = False
 
-# Gunakan key unik versi/counter untuk mereset widget input text secara aman
 if "form_version" not in st.session_state:
     st.session_state.form_version = 0
 
@@ -384,9 +383,15 @@ with tab_entri:
                         })
 
                     with st.spinner("Sedang mengunggah data ke Google Sheets..."):
-                        response = requests.post(WEBHOOK_URL, data=json.dumps(payload), headers={"Content-Type": "application/json"}, timeout=20)
+                        response = requests.post(
+                            WEBHOOK_URL, 
+                            data=json.dumps(payload), 
+                            headers={"Content-Type": "application/json"}, 
+                            timeout=25,
+                            allow_redirects=True
+                        )
 
-                    if response.status_code == 200:
+                    if response.status_code in [200, 201, 302]:
                         reset_seluruh_form()
                         st.session_state.pesan_sukses = True
                         st.cache_data.clear()
@@ -548,9 +553,15 @@ with tab_kelola:
                     }
 
                     with st.spinner("Menyimpan pembaruan ke Google Sheets..."):
-                        res_update = requests.post(WEBHOOK_URL, data=json.dumps(payload_update), headers={"Content-Type": "application/json"}, timeout=20)
+                        res_update = requests.post(
+                            WEBHOOK_URL, 
+                            data=json.dumps(payload_update), 
+                            headers={"Content-Type": "application/json"}, 
+                            timeout=25,
+                            allow_redirects=True
+                        )
 
-                    if res_update.status_code == 200:
+                    if res_update.status_code in [200, 201, 302]:
                         st.success("✅ Data berhasil diperbarui di Google Sheets!")
                         st.cache_data.clear()
                         st.rerun()
