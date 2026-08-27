@@ -172,7 +172,7 @@ with tab_entri:
     st.markdown("<br>", unsafe_allow_html=True)
 
     st.markdown('<div class="section-title">2. Pilih Material Per Konstruksi</div>', unsafe_allow_html=True)
-    col_k1, col_k2, col_k3 = st.columns([1.2, 1.2, 1])
+    col_k1, col_k2 = st.columns(2)
 
     list_jenis = sorted(df_master["JENIS KONSTRUKSI"].unique().tolist())
     with col_k1:
@@ -182,12 +182,6 @@ with tab_entri:
     with col_k2:
         list_type = sorted(df_filtered_jenis["TYPE KONSTRUKSI"].unique().tolist())
         type_selected = st.selectbox("2. Pilih Type Konstruksi:", list_type, key="entri_t_konst")
-
-    with col_k3:
-        jumlah_pemakaian = st.number_input(
-            "3. Jumlah Pemakaian (Set/Unit):",
-            min_value=1, value=1, step=1, key="entri_jml"
-        )
 
     df_filtered = df_filtered_jenis[df_filtered_jenis["TYPE KONSTRUKSI"] == type_selected].copy()
     st.caption("☑️ **Tandai / Centang material yang akan dipakai di bawah ini, lalu klik tombol tambah ke keranjang:**")
@@ -217,9 +211,9 @@ with tab_entri:
                     "Jenis Konstruksi": jenis_selected,
                     "Type Konstruksi": type_selected,
                     "Material": mat,
-                    "Volume Material": int(jumlah_pemakaian),
-                    "Volume Pasang": int(jumlah_pemakaian),
-                    "Volume Bongkar": 0,
+                    "Volume Material": 0,  # Nilai awal 0
+                    "Volume Pasang": 0,    # Nilai awal 0
+                    "Volume Bongkar": 0,   # Nilai awal 0
                 }
                 st.session_state.keranjang.append(item_baru)
                 jumlah_ditambah += 1
